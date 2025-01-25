@@ -312,7 +312,7 @@ AUTH_USER_MODEL = 'authentication.User'
 
 # Redis Configuration 
 redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
-print(redis_url)
+print("redis url",redis_url)
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
