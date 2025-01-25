@@ -251,19 +251,26 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       }
     };
 
+    let lastSentTime = 0;
+
     const handleMouseMove = (event) => {
+      const currentTime = Date.now();
+      if (currentTime - lastSentTime < 500) return; // Limit to 5 times per second
+
+      lastSentTime = currentTime;
+
       const boundingRect = modelerRef.current._container.getBoundingClientRect();
       const x = event.clientX - boundingRect.left;
       const y = event.clientY - boundingRect.top;
 
       // Broadcast cursor position
       socket.current.send(
-        JSON.stringify({
-          action: 'update_cursor',
-          user: userId.current,
-          position: { x, y },
-          color: userColor.current,
-        })
+      JSON.stringify({
+        action: 'update_cursor',
+        user: userId.current,
+        position: { x, y },
+        color: userColor.current,
+      })
       );
     };
 

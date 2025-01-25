@@ -116,7 +116,7 @@ DATABASES = {
         'PASSWORD': 'Planspiel',
 
         # Uncomment the following line while using Docker, comment it out while using local machine
-        'HOST': 'db',
+        # 'HOST': 'db',
         'PORT': 5432,
     }
 }
@@ -315,7 +315,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],  # Redis server host
+            "hosts": [os.environ.get('REDIS_URL', ("127.0.0.1", 6379))],  # Redis server host
         },
     },
 }
