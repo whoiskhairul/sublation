@@ -3,15 +3,14 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  build: {
-    outDir: 'dist', // Ensure the output folder is correct
-  },
   server: {
-    open: true,
-  },
-  resolve: {
-    alias: {
-      '@': '/src',
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 });
