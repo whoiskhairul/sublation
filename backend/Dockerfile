@@ -29,21 +29,16 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     redis-server
 
+# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# RUN python manage.py collectstatic --noinput
 
 # Copy project code
 COPY . .
-
-
 
 # Exposing the ports we need (example: Django on 8000, Redis on 6379)
 EXPOSE 8000
 # EXPOSE 6379
 
 # Start Redis and Django in the same container.
-# CMD ["sh", "-c", "redis-server --bind 0.0.0.0 --port 6379 & python manage.py runserver 0.0.0.0:8000"]
-
-
-CMD ["gunicorn", "backend.wsgi:application", "--bind", "0.0.0.0:8000", ]
+CMD ["sh", "-c", "redis-server --bind 0.0.0.0 --port 6379 & gunicorn backend.wsgi:application --bind 0.0.0.0:8000"]

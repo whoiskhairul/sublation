@@ -1,19 +1,28 @@
+# Use an official Node.js image
 FROM node:18-alpine
+
+# Set the working directory inside the container
 WORKDIR /app
 
-COPY package*.json ./
+# Copy package.json and package-lock.json into the container
+COPY package.json package-lock.json ./
+
+# Install dependencies
 RUN npm install
 
+
+# Copy all project files into the container
 COPY . .
 
-# Build your React app
 RUN npm run build
 
-# Install a static server to host the build folder
+# Install a static file server
 RUN npm install -g serve
 
-# Expose a port
+
+# Expose the development server port
 EXPOSE 3000
 
-# Final command: serve the build directory
-CMD ["serve", "-s", "build", "-l", "3000"]
+
+# Command to serve the built files
+CMD ["serve", "dist", "-l", "3000"]
