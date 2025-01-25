@@ -121,7 +121,7 @@ DATABASES = {
     }
 }
 
-# Database configuration for Railway
+# Database configuration for Railway hosting
 DATABASE_URL = os.environ.get('DATABASE_URL')
 print(DATABASE_URL)
 DATABASES['default'] = dj_database_url.parse(DATABASE_URL)
@@ -311,11 +311,13 @@ AUTH_USER_MODEL = 'authentication.User'
 # }
 
 # Redis Configuration 
+redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+print(redis_url)
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [os.environ.get('REDIS_URL', ("127.0.0.1", 6379))],  # Redis server host
+            "hosts": [redis_url],  # Redis server host
         },
     },
 }

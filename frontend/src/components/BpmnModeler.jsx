@@ -265,12 +265,12 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
 
       // Broadcast cursor position
       socket.current.send(
-      JSON.stringify({
-        action: 'update_cursor',
-        user: userId.current,
-        position: { x, y },
-        color: userColor.current,
-      })
+        JSON.stringify({
+          action: 'update_cursor',
+          user: userId.current,
+          position: { x, y },
+          color: userColor.current,
+        })
       );
     };
 
@@ -383,7 +383,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
         } catch (error) {
 
           // console.error("Failed to save BPMN XML:", error.response.status);
-          const reply = error.response.data.reply? error.response.data.reply: 'Something went wrong.';
+          const reply = error.response.data.reply ? error.response.data.reply : 'Something went wrong.';
           setNotifMessage(reply);
           setNotifSeverity('error');
           setOpen(true);
@@ -660,65 +660,64 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
     if (!modelerRef.current) return;
 
     modelerRef.current.saveXML({ format: true }).then(
-        async ({ xml }) => {
-          try {
-            const { svg } = await modelerRef.current.saveSVG({ format: true });
-            const token = await refreshAccessToken()
-            console.log('data:', data);
-            console.log('token:', token);
-            console.log('xml:', xml);
-            console.log('svg:', svg);
-            //
-            // diagram_id = request.data.get('diagram_id')
-            // new_bpmn_xml = request.data.get('bpmn_xml')
-            // version_name = request.data.get('version_name')
+      async ({ xml }) => {
+        try {
+          const { svg } = await modelerRef.current.saveSVG({ format: true });
+          const token = await refreshAccessToken()
+          console.log('data:', data);
+          console.log('token:', token);
+          console.log('xml:', xml);
+          console.log('svg:', svg);
+          //
+          // diagram_id = request.data.get('diagram_id')
+          // new_bpmn_xml = request.data.get('bpmn_xml')
+          // version_name = request.data.get('version_name')
 
-            const formData = new FormData();
-            formData.append("diagram_id", encryptedID);
-            formData.append("bpmn_xml", xml);
-            formData.append("version_name", data);
+          const formData = new FormData();
+          formData.append("diagram_id", encryptedID);
+          formData.append("bpmn_xml", xml);
+          formData.append("version_name", data);
 
-            const url = config.apiBaseUrl + "/bpmn/save-diagram-version/";
-            const response = await axios.post(
-                url,
-                {
-                  diagram_id: encryptedID,
-                  bpmn_xml: xml,
-                  version_name: data,
-                  svg: svg
-                },
-                {
-                  headers: {
-                    "Authorization": `Bearer ${token}`, // Bearer token in headers
-                    "Content-Type": "application/json",
-                  }
-                }
-            );
-
-            if (response.status === 200) {
-              console.log("Response:", response.data);
-              setNotifMessage(`BPMN Diagram saved as ${data}.`);
-              setNotifSeverity('success');
-              setOpen(true);
-            }else
+          const url = config.apiBaseUrl + "/bpmn/save-diagram-version/";
+          const response = await axios.post(
+            url,
             {
-              console.error("Failed to save BPMN XML to the server.");
-              setNotifSeverity('error');
-              setNotifMessage(`Failed to save.`);
-              setOpen(true);
+              diagram_id: encryptedID,
+              bpmn_xml: xml,
+              version_name: data,
+              svg: svg
+            },
+            {
+              headers: {
+                "Authorization": `Bearer ${token}`, // Bearer token in headers
+                "Content-Type": "application/json",
+              }
             }
+          );
 
-          } catch (error) {
-            console.log("Error saving BPMN XML:", error);
+          if (response.status === 200) {
+            console.log("Response:", response.data);
+            setNotifMessage(`BPMN Diagram saved as ${data}.`);
+            setNotifSeverity('success');
+            setOpen(true);
+          } else {
+            console.error("Failed to save BPMN XML to the server.");
             setNotifSeverity('error');
             setNotifMessage(`Failed to save.`);
             setOpen(true);
-
           }
-        },
-        (err) => {
-          console.error("Error saving BPMN XML:", err);
+
+        } catch (error) {
+          console.log("Error saving BPMN XML:", error);
+          setNotifSeverity('error');
+          setNotifMessage(`Failed to save.`);
+          setOpen(true);
+
         }
+      },
+      (err) => {
+        console.error("Error saving BPMN XML:", err);
+      }
     );
   }
 
@@ -767,15 +766,15 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       <div style={{ position: "relative" }}>
         {/* Toolbar */}
         <Modal open={modelOpen} onClose={handleCloseModal} aria-labelledby="modal-modal-title" aria-describedby="modal-modal-description">
-            {/*<SaveVersionDialog*/}
-            {/*    isOpen={modelOpen}*/}
-            {/*    onClose={handleCloseModal}*/}
-            {/*    onSubmit={handleSaveAS}*/}
-            {/*/>*/}
+          {/*<SaveVersionDialog*/}
+          {/*    isOpen={modelOpen}*/}
+          {/*    onClose={handleCloseModal}*/}
+          {/*    onSubmit={handleSaveAS}*/}
+          {/*/>*/}
           <SaveVersionDialog
-              isOpen={modelOpen}
-              onClose={handleCloseModal}
-              onSubmit={handleSaveAS}
+            isOpen={modelOpen}
+            onClose={handleCloseModal}
+            onSubmit={handleSaveAS}
           />
         </Modal>
 
@@ -822,7 +821,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
           }}
         >
 
-<div
+          <div
             className="indicatior-row"
             style={{
               display: "flex",
@@ -857,82 +856,82 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
               ⛔{errorMessages.length} {/* Total number of errors */}
             </div>
 
-      {/* Display error list when toggled */}
-      {showErrors && errorMessages.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            top: "50px", // Position below the error indicator
-            right: "0",
-            backgroundColor: "#ffffff",
-            borderRadius: "8px",
-            padding: "10px",
-            boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-            zIndex: 1000,
-            maxHeight: "200px", // Limit height for long lists
-            overflowY: "auto", // Scroll for long lists
-            transition: "transform 0.3s ease-in-out",
-            width: "300px", // Width of the error list
-
-            /* Scrollbar Styling */
-            scrollbarWidth: "thin", // Modern scrollbar for Firefox
-            scrollbarColor: "#c0c0c0 #f0f0f0", // Thumb and track colors
-
-
-          }}
-          onMouseLeave={()=>{if (showErrors) setShowErrors(false)}} // Hide error list on mouse leave
-
-
-        >
-          <strong
-            style={{
-              display: "block",
-              marginBottom: "10px",
-              fontSize: "1rem",
-              color: "#721c24",
-            }}
-          >
-            Errors ({errorMessages.length}): {/* Total number of errors */}
-          </strong>
-          <ul
-            style={{
-              listStyleType: "none",
-              padding: 0,
-              margin: 0,
-              overflow: "hidden",
-            }}
-          >
-            {errorMessages.map((error, index) => (
-              <li
-                key={index}
+            {/* Display error list when toggled */}
+            {showErrors && errorMessages.length > 0 && (
+              <div
                 style={{
-                  color: "#721c24",
-                  marginBottom: "10px",
-                  fontSize: "0.875rem",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "5px",
+                  position: "absolute",
+                  top: "50px", // Position below the error indicator
+                  right: "0",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "8px",
+                  padding: "10px",
+                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                  zIndex: 1000,
+                  maxHeight: "200px", // Limit height for long lists
+                  overflowY: "auto", // Scroll for long lists
+                  transition: "transform 0.3s ease-in-out",
+                  width: "300px", // Width of the error list
+
+                  /* Scrollbar Styling */
+                  scrollbarWidth: "thin", // Modern scrollbar for Firefox
+                  scrollbarColor: "#c0c0c0 #f0f0f0", // Thumb and track colors
+
+
                 }}
+                onMouseLeave={() => { if (showErrors) setShowErrors(false) }} // Hide error list on mouse leave
+
+
               >
-                <span
+                <strong
                   style={{
+                    display: "block",
+                    marginBottom: "10px",
                     fontSize: "1rem",
                     color: "#721c24",
-                    fontWeight: "bold",
                   }}
                 >
-                  ⛔
-                </span>
-                <div>
-                  <strong>Element:</strong> {error.elementId || "Unknown"}
-                  <br />
-                  <strong>Message:</strong> {error.message}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                  Errors ({errorMessages.length}): {/* Total number of errors */}
+                </strong>
+                <ul
+                  style={{
+                    listStyleType: "none",
+                    padding: 0,
+                    margin: 0,
+                    overflow: "hidden",
+                  }}
+                >
+                  {errorMessages.map((error, index) => (
+                    <li
+                      key={index}
+                      style={{
+                        color: "#721c24",
+                        marginBottom: "10px",
+                        fontSize: "0.875rem",
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "5px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "1rem",
+                          color: "#721c24",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        ⛔
+                      </span>
+                      <div>
+                        <strong>Element:</strong> {error.elementId || "Unknown"}
+                        <br />
+                        <strong>Message:</strong> {error.message}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
 
             {/* /* User presence indicator */}
@@ -983,7 +982,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
                     transition: "transform 0.3s ease-in-out",
 
                   }}
-                  onMouseLeave={()=>{if (showUsers) setShowUsers(false)}} // Hide user list on mouse leave
+                  onMouseLeave={() => { if (showUsers) setShowUsers(false) }} // Hide user list on mouse leave
                 >
                   <strong style={{ display: "block", marginBottom: "5px", color: "#333" }}>
                     Users:
