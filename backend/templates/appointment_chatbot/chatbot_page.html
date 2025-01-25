@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+        }
+        #chat-window {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            height: 600px;
+            overflow-y: auto;
+            background: #fff;
+        }
+        .message {
+            margin: 5px 0;
+        }
+        .user {
+            text-align: right;
+            color: blue;
+        }
+        .bot {
+            text-align: left;
+            color: green;
+        }
+        #user-input {
+            width: calc(100% - 90px);
+            padding: 8px;
+        }
+        button {
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chatbot</h1>
+    <div id="chat-window"></div>
+    <input type="text" id="user-input" placeholder="Type your message..." />
+    <input type="submit" onclick="sendMessage()" value="SEND">
+
+    <script>
+        // Add event listener to detect Enter key press
+        document.getElementById("user-input").addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                sendMessage();
+                event.preventDefault(); // Prevent form submission or unintended behaviors
+            }
+        });
+
+        async function sendMessage() {
+            const userMessage = document.getElementById("user-input").value;
+            if (!userMessage) return;
+
+            // Display user message
+            const chatWindow = document.getElementById("chat-window");
+            chatWindow.innerHTML += `<div class="message user"><strong>You:</strong> ${userMessage}</div>`;
+
+            // Clear input
+            document.getElementById("user-input").value = "";
+
+            // Send message to backend
+            try {
+                const response = await fetch("/appointment/chat/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: userMessage }),
+                });
+
+                const data = await response.json();
+
+                // Display bot response
+                if (data.reply) {
+                    chatWindow.innerHTML += `<div class="message bot"><strong>Bot:</strong> ${data.reply}</div>`;
+                } else if (data.error) {
+                    chatWindow.innerHTML += `<div class="message bot"><strong>Bot:</strong> Sorry, something went wrong.</div>`;
+                }
+
+                // Auto-scroll chat window
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            } catch (error) {
+                chatWindow.innerHTML += `<div class="message bot"><strong>Bot:</strong> Sorry, I couldn't process your request.</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

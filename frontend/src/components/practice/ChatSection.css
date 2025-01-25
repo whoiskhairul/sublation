@@ -1,0 +1,11 @@
+.chat-topbar {
+  background-color: #007bff; /* Same color as the submit button */
+  color: white; /* Text color for contrast */
+  width: 100%; /* Full width of the chat section */
+  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2); /* Shadow for drama */
+  padding: 10px; /* Padding for better spacing */
+  text-align: center; /* Center-align the title */
+  font-weight: bold; /* Make the text bold for emphasis */
+  border-radius: 5px 5px 0 0; /* Rounded top corners */
+  font-size: 16px; /* Adjust font size */
+}

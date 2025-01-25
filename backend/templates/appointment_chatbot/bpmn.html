@@ -1,0 +1,279 @@
+<!-- loading static files -->
+{% load static %}
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>BPMN Generator</title>
+
+    <!-- required modeler styles -->
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.1.1/dist/assets/bpmn-js.css">
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.1.1/dist/assets/diagram-js.css">
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.1.1/dist/assets/bpmn-font/css/bpmn.css">
+
+    <!-- modeler distro -->
+    <script src="https://unpkg.com/bpmn-js@18.1.1/dist/bpmn-modeler.development.js"></script>
+
+    <!-- needed for this example only -->
+    <script src="https://unpkg.com/jquery@3.3.1/dist/jquery.js"></script>
+
+    <!-- example styles -->
+    <style>
+      html, body, #canvas {
+        height: 100%;
+        padding: 0;
+        margin: 0;
+      }
+
+      .diagram-note {
+        background-color: rgba(66, 180, 21, 0.7);
+        color: White;
+        border-radius: 5px;
+        font-family: Arial;
+        font-size: 12px;
+        padding: 5px;
+        min-height: 16px;
+        width: 50px;
+        text-align: center;
+      }
+
+      .needs-discussion:not(.djs-connection) .djs-visual > :nth-child(1) {
+        stroke: rgba(66, 180, 21, 0.7) !important;
+      }
+
+      #save-button {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+      }
+
+      #canvas {
+        position: absolute;
+        width: 70%;
+        height: 80%;
+      }
+
+      /* Chatbot Styles */
+      #chatbot-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 300px;
+        font-family: Arial, sans-serif;
+        z-index: 9999;
+      }
+
+      #chatbot-header {
+        background: #007bff;
+        color: #fff;
+        padding: 10px;
+        border-radius: 5px 5px 0 0;
+        cursor: pointer;
+      }
+
+      #chatbot-body {
+        background: #f1f1f1;
+        border: 1px solid #ccc;
+        border-top: none;
+        border-radius: 0 0 5px 5px;
+        display: none;
+        flex-direction: column;
+        height: 400px;
+      }
+
+      #chatbot-messages {
+        flex: 1;
+        padding: 10px;
+        overflow-y: auto;
+      }
+
+      .message {
+        padding: 8px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        max-width: 80%;
+        clear: both;
+      }
+
+      .message.user {
+        background: #007bff;
+        color: #fff;
+        float: right;
+        margin-left: 20%;
+      }
+
+      .message.bot {
+        background: #fff;
+        border: 1px solid #ccc;
+        float: left;
+        margin-right: 20%;
+      }
+
+      #chatbot-input-area {
+        display: flex;
+        border-top: 1px solid #ccc;
+        padding: 5px;
+      }
+
+      #chatbot-input {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+
+      #chatbot-send {
+        background: #007bff;
+        border: none;
+        color: #fff;
+        padding: 8px 12px;
+        margin-left: 5px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="canvas"></div>
+
+    <button id="save-button">print to console</button>
+
+    <!-- Chatbot UI -->
+    <div id="chatbot-container">
+      <div id="chatbot-header">Chat with us!</div>
+      <div id="chatbot-body" style="display:flex;">
+        <div id="chatbot-messages"></div>
+        <div id="chatbot-input-area">
+          <input type="text" id="chatbot-input" placeholder="Type your message" />
+          <button id="chatbot-send">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var diagramUrl = '{% static "testfile.bpmn" %}';
+      var currentDiagramXML = null; // to store the currently displayed diagram content
+
+      // modeler instance
+      var bpmnModeler = new BpmnJS({
+        container: '#canvas',
+      });
+
+      async function exportDiagram() {
+        try {
+          var result = await bpmnModeler.saveXML({ format: true });
+          alert('Diagram exported. Check the developer tools!');
+          console.log('DIAGRAM', result.xml);
+        } catch (err) {
+          console.error('could not save BPMN 2.0 diagram', err);
+        }
+      }
+
+      async function openDiagram(bpmnXML) {
+        try {
+          await bpmnModeler.importXML(bpmnXML);
+
+          var canvas = bpmnModeler.get('canvas');
+          var overlays = bpmnModeler.get('overlays');
+
+          canvas.zoom('fit-viewport');
+
+          overlays.add('SCAN_OK', 'note', {
+            position: {
+              bottom: 0,
+              right: 0
+            },
+            html: '<div class="diagram-note">Mixed up the labels?</div>'
+          });
+
+          canvas.addMarker('SCAN_OK', 'needs-discussion');
+        } catch (err) {
+          console.error('could not import BPMN 2.0 diagram', err);
+        }
+      }
+
+      function loadDiagram() {
+        $.get(diagramUrl, function(bpmnXML) {
+          // If the diagram content has changed, re-import it
+          if (bpmnXML !== currentDiagramXML) {
+            currentDiagramXML = bpmnXML;
+            openDiagram(bpmnXML);
+          }
+        }, 'text');
+      }
+
+      // Initial load of the diagram
+      loadDiagram();
+
+      // Poll every 5 seconds for changes to the BPMN file
+      setInterval(loadDiagram, 5000);
+
+      // wire save button
+      $('#save-button').click(exportDiagram);
+
+
+      // Chatbot Logic
+      var chatbotHeader = document.getElementById('chatbot-header');
+      var chatbotBody = document.getElementById('chatbot-body');
+      var chatbotMessages = document.getElementById('chatbot-messages');
+      var chatbotInput = document.getElementById('chatbot-input');
+      var chatbotSend = document.getElementById('chatbot-send');
+
+      // Toggle chatbot window
+      chatbotHeader.addEventListener('click', function() {
+        if (chatbotBody.style.display === 'none' || chatbotBody.style.display === '') {
+          chatbotBody.style.display = 'flex';
+        } else {
+          chatbotBody.style.display = 'none';
+        }
+      });
+
+      // Handle sending message
+      chatbotSend.addEventListener('click', sendMessage);
+      chatbotInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+
+      function appendMessage(text, sender) {
+        var msgDiv = document.createElement('div');
+        msgDiv.className = 'message ' + sender;
+        msgDiv.textContent = text;
+        chatbotMessages.appendChild(msgDiv);
+        chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+      }
+
+      async function sendMessage() {
+        var text = chatbotInput.value.trim();
+        if (!text) return;
+        appendMessage(text, 'user');
+        chatbotInput.value = '';
+
+        // Send the user message to the server
+        try {
+          var response = await fetch('/bpmn/', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          });
+
+          var data = await response.json();
+
+          if (data && data.reply) {
+            appendMessage(data.reply, 'bot');
+          } else {
+            appendMessage('Sorry, I could not get a response from the server.', 'bot');
+          }
+        } catch (error) {
+          console.error(error);
+          appendMessage('Error connecting to the server.', 'bot');
+        }
+      }
+
+      // Greet the user when the chatbot opens
+      appendMessage('Hello! How can I help you today?', 'bot');
+    </script>
+  </body>
+</html>

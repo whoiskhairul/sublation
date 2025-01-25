@@ -1,0 +1,87 @@
+
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions 
+    xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:tns="http://www.example.org/BPMN"
+    xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+    xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+    xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+    targetNamespace="http://www.example.org/BPMN"
+    id="appointmentProcess">
+
+  <process id="appointmentBooking" name="Appointment Booking System" isExecutable="true">
+    <startEvent id="startEvent" name="Start" />
+    <task id="checkAvailability" name="Check Availability" />
+    <exclusiveGateway id="gateway" name="Availability Check"/>
+    <task id="bookAppointment" name="Book Appointment" />
+    <task id="notifyPatient" name="Notify Patient" />
+    <task id="sendConfirmation" name="Send Confirmation" />
+    <endEvent id="endEvent" name="End" />
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="checkAvailability" />
+    <sequenceFlow id="flow2" sourceRef="checkAvailability" targetRef="gateway" />
+    <sequenceFlow id="flow3" sourceRef="gateway" targetRef="bookAppointment" name="Yes" />
+    <sequenceFlow id="flow4" sourceRef="gateway" targetRef="notifyPatient" name="No" />
+    <sequenceFlow id="flow5" sourceRef="notifyPatient" targetRef="checkAvailability" />
+    <sequenceFlow id="flow6" sourceRef="bookAppointment" targetRef="sendConfirmation" />
+    <sequenceFlow id="flow7" sourceRef="sendConfirmation" targetRef="endEvent" />
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram_appointmentBooking">
+    <bpmndi:BPMNPlane id="plane_appointmentBooking" bpmnElement="appointmentBooking">
+      <bpmndi:BPMNShape id="shape_startEvent" bpmnElement="startEvent">
+        <dc:Bounds x="100" y="150" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_checkAvailability" bpmnElement="checkAvailability">
+        <dc:Bounds x="200" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_gateway" bpmnElement="gateway">
+        <dc:Bounds x="350" y="150" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_bookAppointment" bpmnElement="bookAppointment">
+        <dc:Bounds x="450" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_notifyPatient" bpmnElement="notifyPatient">
+        <dc:Bounds x="350" y="250" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_sendConfirmation" bpmnElement="sendConfirmation">
+        <dc:Bounds x="600" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_endEvent" bpmnElement="endEvent">
+        <dc:Bounds x="750" y="150" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNEdge id="edge_flow1" bpmnElement="flow1">
+        <di:waypoint x="136" y="168" />
+        <di:waypoint x="200" y="168" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow2" bpmnElement="flow2">
+        <di:waypoint x="300" y="190" />
+        <di:waypoint x="350" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow3" bpmnElement="flow3">
+        <di:waypoint x="370" y="175" />
+        <di:waypoint x="450" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow4" bpmnElement="flow4">
+        <di:waypoint x="370" y="225" />
+        <di:waypoint x="350" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow5" bpmnElement="flow5">
+        <di:waypoint x="450" y="290" />
+        <di:waypoint x="350" y="300" />
+        <di:waypoint x="200" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow6" bpmnElement="flow6">
+        <di:waypoint x="550" y="190" />
+        <di:waypoint x="600" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow7" bpmnElement="flow7">
+        <di:waypoint x="700" y="190" />
+        <di:waypoint x="750" y="168" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>

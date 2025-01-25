@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions 
+    xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:tns="http://www.example.org/BPMN"
+    xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+    xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+    xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+    targetNamespace="http://www.example.org/BPMN"
+    id="pizzaDeliveryProcess">
+    
+  <process id="pizzaDelivery" name="Pizza Delivery System" isExecutable="true">
+    <startEvent id="startEvent" name="Customer Places Order" />
+    <task id="receiveOrder" name="Receive Order" />
+    <task id="preparePizza" name="Prepare Pizza" />
+    <task id="bakePizza" name="Bake Pizza" />
+    <task id="packPizza" name="Pack Pizza" />
+    <task id="assignDelivery" name="Assign Delivery" />
+    <task id="deliverPizza" name="Deliver Pizza" />
+    <task id="confirmPayment" name="Confirm Payment" />
+    <endEvent id="endEvent" name="Order Completed" />
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="receiveOrder" />
+    <sequenceFlow id="flow2" sourceRef="receiveOrder" targetRef="preparePizza" />
+    <sequenceFlow id="flow3" sourceRef="preparePizza" targetRef="bakePizza" />
+    <sequenceFlow id="flow4" sourceRef="bakePizza" targetRef="packPizza" />
+    <sequenceFlow id="flow5" sourceRef="packPizza" targetRef="assignDelivery" />
+    <sequenceFlow id="flow6" sourceRef="assignDelivery" targetRef="deliverPizza" />
+    <sequenceFlow id="flow7" sourceRef="deliverPizza" targetRef="confirmPayment" />
+    <sequenceFlow id="flow8" sourceRef="confirmPayment" targetRef="endEvent" />
+  </process>
+  
+  <bpmndi:BPMNDiagram id="diagram_pizzaDelivery">
+    <bpmndi:BPMNPlane id="plane_pizzaDelivery" bpmnElement="pizzaDelivery">
+      <bpmndi:BPMNShape id="shape_startEvent" bpmnElement="startEvent">
+        <dc:Bounds x="100" y="150" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_receiveOrder" bpmnElement="receiveOrder">
+        <dc:Bounds x="200" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_preparePizza" bpmnElement="preparePizza">
+        <dc:Bounds x="350" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_bakePizza" bpmnElement="bakePizza">
+        <dc:Bounds x="500" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_packPizza" bpmnElement="packPizza">
+        <dc:Bounds x="650" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_assignDelivery" bpmnElement="assignDelivery">
+        <dc:Bounds x="800" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_deliverPizza" bpmnElement="deliverPizza">
+        <dc:Bounds x="950" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_confirmPayment" bpmnElement="confirmPayment">
+        <dc:Bounds x="1100" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape_endEvent" bpmnElement="endEvent">
+        <dc:Bounds x="1250" y="150" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNEdge id="edge_flow1" bpmnElement="flow1">
+        <di:waypoint x="136" y="168" />
+        <di:waypoint x="200" y="168" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow2" bpmnElement="flow2">
+        <di:waypoint x="300" y="190" />
+        <di:waypoint x="350" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow3" bpmnElement="flow3">
+        <di:waypoint x="450" y="190" />
+        <di:waypoint x="500" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow4" bpmnElement="flow4">
+        <di:waypoint x="600" y="190" />
+        <di:waypoint x="650" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow5" bpmnElement="flow5">
+        <di:waypoint x="750" y="190" />
+        <di:waypoint x="800" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow6" bpmnElement="flow6">
+        <di:waypoint x="900" y="190" />
+        <di:waypoint x="950" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow7" bpmnElement="flow7">
+        <di:waypoint x="1050" y="190" />
+        <di:waypoint x="1100" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge_flow8" bpmnElement="flow8">
+        <di:waypoint x="1200" y="190" />
+        <di:waypoint x="1250" y="168" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
