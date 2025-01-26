@@ -1,6 +1,6 @@
 const config = {
   apiBaseUrl: 'https://pure-celebration-production.up.railway.app',
-  socketBaseurl: 'redis.railway.internal'
+  socketBaseurl: 'autorack.proxy.rlwy.net:23741'
 };
 
 export default config;
