@@ -122,9 +122,9 @@ DATABASES = {
 }
 
 # Database configuration for Railway hosting
-DATABASE_URL = os.environ.get('DATABASE_URL')
-print(DATABASE_URL)
-DATABASES['default'] = dj_database_url.parse(DATABASE_URL)
+# DATABASE_URL = os.environ.get('DATABASE_URL')
+# print(DATABASE_URL)
+# DATABASES['default'] = dj_database_url.parse(DATABASE_URL)
 
 
 
@@ -185,31 +185,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # OpenAI API Key
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-
-# #Email configuration
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
-# EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-
-# # Email settings for development
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# EMAIL_HOST = 'localhost'
-# EMAIL_PORT = 1025
-# EMAIL_USE_TLS = False
-# EMAIL_USE_SSL = False
-# DEFAULT_FROM_EMAIL = 'webmaster@localhost'
-
-
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = os.getenv('EMAIL_HOST')
-# EMAIL_PORT = int(os.getenv('EMAIL_PORT'))
-# EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS') == 'True'
-# EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-# EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-# DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
