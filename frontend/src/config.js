@@ -1,5 +1,5 @@
 const config = {
-  apiBaseUrl: 'http://localhost:8000',
+  apiBaseUrl: 'https://pure-celebration-production.up.railway.app',
   socketBaseurl: 'redis.railway.internal'
 };
 
