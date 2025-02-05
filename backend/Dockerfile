@@ -40,5 +40,5 @@ COPY . .
 EXPOSE 8000
 # EXPOSE 6379
 
-# Start Redis and Django in the same container.
-CMD ["sh", "-c", "redis-server --bind 0.0.0.0 --port 6379 & gunicorn backend.wsgi:application --bind 0.0.0.0:8000"]
+# Start Redis, run makemigrations, migrate, and then start Django with gunicorn.
+CMD ["sh", "-c", "redis-server --bind 0.0.0.0 --port 6379 & python manage.py makemigrations && python manage.py migrate && gunicorn backend.wsgi:application --bind 0.0.0.0:8000"]
