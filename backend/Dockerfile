@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Exposing the ports we need (example: Django on 8000, Redis on 6379)
-EXPOSE 8000
+EXPOSE 8000 6379
 # EXPOSE 6379  
 
 # Start Redis, run makemigrations, migrate, and then start Django with gunicorn.
