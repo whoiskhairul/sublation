@@ -38,7 +38,7 @@ COPY . .
 
 # Exposing the ports we need (example: Django on 8000, Redis on 6379)
 EXPOSE 8000
-# EXPOSE 6379
+# EXPOSE 6379  
 
 # Start Redis, run makemigrations, migrate, and then start Django with gunicorn.
 CMD ["sh", "-c", "redis-server --bind 0.0.0.0 --port 6379 & python manage.py makemigrations && python manage.py migrate && gunicorn backend.wsgi:application --bind 0.0.0.0:8000"]
