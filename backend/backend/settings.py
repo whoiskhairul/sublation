@@ -286,13 +286,14 @@ AUTH_USER_MODEL = 'authentication.User'
 # }
 
 # Redis Configuration 
-redis_url = os.environ.get('REDIS_URL', 'redis://default:HhntnnryIHMirFaPMxPsdpBnyqvuwlYK@redis.railway.internal:6379')
-print("redis url",redis_url)
+REDISHOST = os.getenv('REDISHOST', '127.0.0.1')
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [redis_url],  # Redis server host
+            # "hosts": [("127.0.0.1", 6379)],  # Redis server host
+            "hosts": [(REDISHOST, 6379)],  # Redis server host
         },
     },
 }
