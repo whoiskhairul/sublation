@@ -1,6 +1,18 @@
 body {
   margin: 0;
   font-family: Arial, sans-serif;
+  
+}
+.logo {
+  width: 30px;
+  height: 30px;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  width: 100%;
 }
 
 /* Main container to center the card */
@@ -93,7 +105,7 @@ body {
 /* Login button */
 .login-button {
   width: 100%;
-  background: #0096FF;
+  background-color: #007ACC;
   color: #fff;
   padding: 12px;
   border: none;
@@ -104,7 +116,7 @@ body {
 }
 
 .login-button:hover {
-  background: #007ace;
+  background-color: #0057B8;
 }
 
 /* Divider */
@@ -155,15 +167,18 @@ body {
 /* Signup link */
 .signup-link {
   font-size: 0.85rem;
+  
 }
 
 .signup-link a {
-  color: #007bff;
+  color: #007ACC;
   text-decoration: none;
 }
 
 .signup-link a:hover {
   text-decoration: underline;
+  color: #0057B8;
+  
 }
 
 .error-message {

@@ -4,6 +4,9 @@ import axios from "axios";
 import config from '../config';
 
 import ChatBotIcon from "../assets/chatbot.png";
+//import ChatBotIcon from "../assets/chat.png";
+
+
 import {
   Box,
   Paper,
@@ -35,7 +38,7 @@ const Bubble = styled(Box)(({ theme }) => ({
   right: "11px",
   width: "60px",
   height: "45px",
-  backgroundColor: "#029feb",
+  backgroundColor: "#007ACC",
   borderRadius: "30px",
   display: "flex",
   justifyContent: "center",
@@ -129,7 +132,7 @@ const MessageBubble = styled(Paper)(({ theme, fromuser }) => ({
   borderRadius: 16,
   ...(fromuser
     ? {
-        backgroundColor: theme.palette.primary.main,
+        backgroundColor: "#007ACC",
         color: "#fff",
         alignSelf: "flex-end",
         borderTopRightRadius: 0,
@@ -159,7 +162,7 @@ const TopBar = styled(Box)(({ theme }) => ({
   justifyContent: "space-between",
   padding: theme.spacing(1),
   borderBottom: "1px solid #ccc",
-  backgroundColor: "#029feb", // Updated background color
+  backgroundColor: "#007ACC", // Updated background color
   color: theme.palette.primary.contrastText,  // Updated text color for better contrast
   width: "100%", // Ensures the top bar spans the full width of the container
 }));
@@ -178,17 +181,6 @@ const InputContainer = styled(Box)(({ theme }) => ({
   padding: theme.spacing(1),
   borderTop: "1px solid #ccc",
 }));
-
-
-// const TopBar = styled(Box)(({ theme }) => ({
-//   display: "flex",
-//   alignItems: "center",
-//   justifyContent: "space-between",
-//   padding: theme.spacing(1),
-//   backgroundColor: theme.palette.primary.main,
-//   color: theme.palette.primary.contrastText,
-//   borderRadius: "10px 10px 0 0",
-// }));
 
 const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
   const [messages, setMessages] = useState([]);
@@ -222,9 +214,45 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
   }, [messages]);
 
   // Send on "Enter"
+  // const handleKeyDown = (e) => {
+  //   if (e.key === "Enter") {
+  //     handleSendMessage();
+  //   }
+  // };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
+      if (e.shiftKey) {
+        e.preventDefault();
+  
+        // Get cursor position
+        const { selectionStart, selectionEnd } = inputRef.current;
+  
+        // Insert "\n" at cursor position
+        const newText =
+          inputValue.substring(0, selectionStart) +
+          "\n" +
+          inputValue.substring(selectionEnd);
+  
+        // Update the state
+        setInputValue(newText);
+  
+        // Move cursor back to the correct position AFTER the state updates
+      //   setTimeout(() => {
+      //     inputRef.current.selectionStart = inputRef.current.selectionEnd =
+      //       selectionStart + 1;
+      //   }, 0);
+      // } else {
+      //   e.preventDefault();
+      //   handleSendMessage();
+      // }
+      setTimeout(() => {
+        e.target.selectionStart = e.target.selectionEnd = selectionStart + 1;
+      }, 0);
+    } else {
+      e.preventDefault();
       handleSendMessage();
+    }
     }
   };
   const typeBotMessage = (messageId, fullText, index) => {
@@ -255,7 +283,7 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
     // 1. User message
     const userMessage = {
       id: Date.now(),
-      text: inputValue,
+      text: inputValue.trim(),
       author: "user",
       timestamp: new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -312,9 +340,9 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
   };
 
   
-  const inputRef = useRef(null); // Add this ref for the input field
+  const inputRef = useRef(null); //  this ref for the input field
 
-  // Add useEffect for auto-focus
+  // for auto-focus
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
@@ -368,7 +396,7 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
     
     {/* Avatar */}
     <Avatar
-      src={ChatBotIcon} // Replace this with the path to your image/logo
+      src={ChatBotIcon} // 
       alt="Folia Logo"
       sx={{ width: 30, height: 30, mr: 1 }} // Adjust size and spacing
     />
@@ -462,40 +490,70 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
       </MessagesContainer>
 
       {/* Input & Send */}
-      <InputContainer>
-  {/* Attachment Button */}
-          {/* <IconButton component="label">
-            <AttachFileIcon />
-            <input
-              type="file"
-              hidden
-              onChange={handleFileUpload} // Logic for processing the uploaded file
+  {/* Input & Send */}
+        <InputContainer
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          padding: "8px",
+          border: "1px solid #ccc",   
+          backgroundColor: "#fff",
+          width: "100%",
+         // height: "60px", // FIXED HEIGHT (prevents resizing)
+         maxHeight: "90px", // FIXED HEIGHT (prevents resizing)
+          overflow: "auto", // Ensures no expansion
+        }}
+       
+        >
+    {/* Attachment Button */}
+            {/* <IconButton component="label">
+              <AttachFileIcon />
+              <input
+                type="file"
+                hidden
+                onChange={handleFileUpload} // Logic for processing the uploaded file
+              />
+            </IconButton> */}
+  
+            {/* Message Input */}
+            <TextField
+              variant="outlined"
+              placeholder="Type your message..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              size="small"
+              fullWidth
+              multiline // Allows multiple lines
+              height=""
+              inputRef={inputRef} // Add this ref for the input field
+              sx={{
+                "& .MuiInputBase-root": {
+                  //height: "40px", // Keeps text field fixed height
+                  maxHeight: "60px", // Restricts height
+                  display: "flex",
+                  alignItems: "center",
+                },
+                "& textarea": {
+                  overflow: "hidden", // Prevents dynamic growing
+                 // resize: "none", // Blocks manual resizing
+                  maxHeight: "60px", // Restricts height
+                  lineHeight: "20px",
+                },
+              }}
+  
+             
             />
-          </IconButton> */}
-
-          {/* Message Input */}
-          <TextField
-          inputRef={inputRef}
-            variant="outlined"
-          placeholder={Chatdisabled ? "You don't have permission to chat." : "Type your message..."}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            size="small"
-            fullWidth
-          disabled={Chatdisabled}
-          />
-
-          {/* Send Button */}
-          <IconButton
-            color="primary"
-            onClick={handleSendMessage}
-            sx={{ marginLeft: 1 }}
-          disabled={Chatdisabled}
-          >
-            <SendIcon />
-          </IconButton>
-      </InputContainer>
+  
+            {/* Send Button */}
+            <IconButton
+              color="primary"
+              onClick={handleSendMessage}
+              sx={{ marginLeft: 1 }}
+            >
+              <SendIcon />
+            </IconButton>
+        </InputContainer>
 
   <Dialog
     open={openConfirmDialog}

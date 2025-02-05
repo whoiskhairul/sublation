@@ -14,6 +14,7 @@ import MenuItem from "@mui/material/MenuItem";
 
 
 import { refreshAccessToken } from "./auth";
+import config from "../src/config";
 
 const DEFAULT_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -99,8 +100,10 @@ const BpmnModelerComponent = ({ diagramXml }) => {
       formData.append("file", blob, "diagram.bpmn");
   
       // Send the BPMN XML to the validation API
+      const token = await refreshAccessToken()
+      const url = config.apiBaseUrl + "/bpmn-error-detection/validate/";
       const response = await axios.post(
-        "http://127.0.0.1:8000/bpmn-error-detection/validate/",
+        url,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
@@ -146,8 +149,9 @@ const BpmnModelerComponent = ({ diagramXml }) => {
         try {
           const { svg } = await modelerRef.current.saveSVG({ format: true });
           const token = await refreshAccessToken()
+          const url = config.apiBaseUrl + "/bpmn/save-bpmn/" + encryptedID;
           const response = await axios.put(
-            `http://127.0.0.1:8000/bpmn/save-bpmn/${encryptedID}`,
+            url,
             {
               bpmn_xml: xml,
               bpmn_svg: svg,

@@ -3,6 +3,7 @@ import axios from 'axios'; // Added axios for API requests
 import './SignUpPage.css';
 import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
 import config from '../config';
+import Header from './Header';
 
 const SignUpPage = () => {
   const navigate = useNavigate(); // Initialize the useNavigate hook
@@ -66,6 +67,7 @@ const SignUpPage = () => {
 
   return (
     <div className="signup-container">
+      <Header />
       <div className="signup-card">
         <h1 className="signup-title">Create an account</h1>
 
@@ -97,7 +99,7 @@ const SignUpPage = () => {
           </div>
 
           {/* Phone Number Field */}
-          <div className="input-group">
+          {/* <div className="input-group">
             <label htmlFor="phone">Phone Number</label>
             <input
               type="tel"
@@ -107,7 +109,7 @@ const SignUpPage = () => {
               value={formData.phone} // Controlled input
               onChange={handleInputChange} // Handle change
             />
-          </div>
+          </div> */}
 
           {/* Password Field */}
           <div className="input-group">
@@ -121,7 +123,7 @@ const SignUpPage = () => {
                 value={formData.password} // Controlled input
                 onChange={handleInputChange} // Handle change
               />
-              {/* <span className="password-toggle">👁️</span> */}
+              
             </div>
           </div>
 
@@ -137,7 +139,7 @@ const SignUpPage = () => {
                 value={formData.confirmPassword} // Controlled input
                 onChange={handleInputChange} // Handle change
               />
-              <span className="password-toggle">👁️</span>
+              
             </div>
           </div>
 
@@ -147,7 +149,7 @@ const SignUpPage = () => {
 
         {/* Redirect to Login */}
         <div className="bottom-text">
-          Already have an account? <Link to="/login" style={{ color: '#007bff', textDecoration: 'none' }}>Login</Link>
+          Already have an account? <Link to="/login" style={{textDecoration: 'none' }}>Login</Link>
         </div>
       </div>
     </div>

@@ -5,6 +5,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useUser } from './UserContext'; 
 import axiosInstance, { sendRequest } from '../utils/axiosConfig'; // Import sendRequest
 import config from '../config';
+import logo from "../assets/logo.png"; // Ensure correct path
+import Header from './Header'; // Import Header component
 const LoginPage = () => {
   const navigate = useNavigate(); 
   const { setUser } = useUser(); 
@@ -97,9 +99,13 @@ const LoginPage = () => {
   }, []);
 
   return (
+    <div>
     <div className="login-page-container">
+      <Header />
       <div className="login-card">
-        <h1 className="welcome-text">Hi, Welcome Back!</h1>
+ 
+      <h1 className="signup-title">Log in</h1>
+        
 
         {errorMessage && <p className="error-message">{errorMessage}</p>}
 
@@ -136,7 +142,7 @@ const LoginPage = () => {
         </form>
 
         <div className="signup-link">
-          Don’t have an account? <Link to="/signup">Sign Up</Link>
+          Don’t have an account? <Link to="/signup" style={{fontWeight:"bold"}}>Sign Up</Link>
         </div>
       </div>
 
@@ -157,6 +163,7 @@ const LoginPage = () => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

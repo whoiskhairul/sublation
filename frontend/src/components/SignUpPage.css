@@ -16,7 +16,10 @@
   padding: 30px;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  text-align: left;
+  text-align: left;        
+  margin-top: 100px; /* Optional: Adds margin around the content */
+  
+
 }
 
 /* Title Styling */
@@ -80,7 +83,7 @@
 .signup-button {
   width: 100%;
   padding: 10px;
-  background-color: #007bff;
+  background-color: #007ACC;
   border: none;
   border-radius: 5px;
   color: #fff;
@@ -91,7 +94,7 @@
 }
 
 .signup-button:hover {
-  background-color: #0056b3;
+  background-color:#0057B8;
 }
 
 /* Bottom Redirect Link */
@@ -103,12 +106,14 @@
 }
 
 .bottom-text a {
-  color: #007bff;
+  color: #007ACC;
   font-weight: bold;
   text-decoration: none;
 }
 
 .bottom-text a:hover {
   text-decoration: underline;
+  color: #0057B8;
+  
 }
 

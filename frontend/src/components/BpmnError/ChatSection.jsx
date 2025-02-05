@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import axios from "axios";
+import config from '../../config';
+
 import ChatBotIcon from "../../assets/chatbot.png";
+//import ChatBotIcon from "../../assets/chat.png";
+
 import {
   Box,
   Paper,
@@ -25,35 +29,54 @@ import SendIcon from "@mui/icons-material/Send";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import CloseIcon from "@mui/icons-material/Close";
 import { useParams } from "react-router-dom";
-import { refreshAccessToken } from "../auth";
-import config from "../../config";
+import { refreshAccessToken } from "./auth";
 
 const Bubble = styled(Box)(({ theme }) => ({
-  position: "fixed",
-  bottom: "60px",
-  right: "37px",
+  position: "absolute",
+  bottom: "-45px",
+  right: "11px",
   width: "60px",
-  height: "60px",
-  backgroundColor: theme.palette.primary.main,
-  borderRadius: "50%",
+  height: "45px",
+  backgroundColor: "#007ACC",
+  borderRadius: "30px",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
   color: "white",
   cursor: "pointer",
   zIndex: 1000,
-  boxShadow: "0px 4px 10px rgba(0,0,0,0.3)",
+  transition: "transform 0.2s ease-in-out",
+  "&:hover": {
+    transform: "scale(1.1)",
+  },
+  boxShadow: "0px 8px 16px rgba(0,0,0,0.3)",
+  overflow: "hidden",
+
+  // Responsive styles
+  [theme.breakpoints.down("sm")]: {
+    width: "50px", // Smaller width for smaller screens
+    height: "40px", // Adjusted height for smaller screens
+    bottom: "-40px", // Adjusted position
+    right: "8px", // Adjusted position
+  },
+  [theme.breakpoints.up("lg")]: {
+    width: "70px", // Larger width for larger screens
+    height: "55px", // Adjusted height for larger screens
+    bottom: "-35px", // Adjusted position
+    right: "15px", // Adjusted position
+  },
 }));
 
-const ChatContainer = styled(Box)(({ theme }) => ({
+
+const ChatContainer = styled(Box)(({ theme }) => ({   
+  //padding:"5px",
   position: "fixed",
   bottom: "5px",
   right: "20px",
-  top:"10x",
   width: "80%", // Default to full width on small screens
   maxWidth: "400px", // Cap the width for larger screens
   height: "40%", // Dynamic height: half the viewport height
-  maxHeight: "500px", // Cap the height for larger screens
+  maxHeight: "732px", // Cap the height for larger screens
   backgroundColor: "white",
   border: "1px solid #ccc",
   borderRadius: "20px 20px 0 0",
@@ -62,10 +85,12 @@ const ChatContainer = styled(Box)(({ theme }) => ({
   marginTop:"3px",
   flexDirection: "column",
   zIndex: 1000,
+  animation: "fadeIn 0.3s ease",
   [theme.breakpoints.up("sm")]: {
     width: "400px", // Set specific width for medium+ screens
-    height: "500px", // Set specific height for medium+ screens
+    height: "732px", // Set specific height for medium+ screens
   },
+
 }));
 
 // The scrollable messages area
@@ -98,6 +123,7 @@ const MessagesContainer = styled(Box)(() => ({
 
 // A single chat "bubble"
 const MessageBubble = styled(Paper)(({ theme, fromuser }) => ({
+  boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
   marginBottom: theme.spacing(1.5),
   padding: theme.spacing(1),
   maxWidth: "75%",
@@ -105,7 +131,7 @@ const MessageBubble = styled(Paper)(({ theme, fromuser }) => ({
   borderRadius: 16,
   ...(fromuser
     ? {
-        backgroundColor: theme.palette.primary.main,
+        backgroundColor: "#007ACC",
         color: "#fff",
         alignSelf: "flex-end",
         borderTopRightRadius: 0,
@@ -124,15 +150,18 @@ const MessageRow = styled("div")(({ fromuser }) => ({
   flexDirection: fromuser ? "row-reverse" : "row",
   alignItems: "flex-end",
   marginBottom: "8px",
+  padding:"5px",
 }));
 
 const TopBar = styled(Box)(({ theme }) => ({
+  borderRadius: "20px 20px 0 0",
+  marginBottom:"2px",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   padding: theme.spacing(1),
   borderBottom: "1px solid #ccc",
-  backgroundColor: theme.palette.primary.main, // Updated background color
+  backgroundColor: "#007ACC", // Updated background color
   color: theme.palette.primary.contrastText,  // Updated text color for better contrast
   width: "100%", // Ensures the top bar spans the full width of the container
 }));
@@ -152,18 +181,7 @@ const InputContainer = styled(Box)(({ theme }) => ({
   borderTop: "1px solid #ccc",
 }));
 
-
-// const TopBar = styled(Box)(({ theme }) => ({
-//   display: "flex",
-//   alignItems: "center",
-//   justifyContent: "space-between",
-//   padding: theme.spacing(1),
-//   backgroundColor: theme.palette.primary.main,
-//   color: theme.palette.primary.contrastText,
-//   borderRadius: "10px 10px 0 0",
-// }));
-
-const ChatSection = ({ onNewDiagram, conversation }) => {
+const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [botTyping, setBotTyping] = useState(false);
@@ -195,9 +213,45 @@ const ChatSection = ({ onNewDiagram, conversation }) => {
   }, [messages]);
 
   // Send on "Enter"
+  // const handleKeyDown = (e) => {
+  //   if (e.key === "Enter") {
+  //     handleSendMessage();
+  //   }
+  // };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
+      if (e.shiftKey) {
+        e.preventDefault();
+  
+        // Get cursor position
+        const { selectionStart, selectionEnd } = inputRef.current;
+  
+        // Insert "\n" at cursor position
+        const newText =
+          inputValue.substring(0, selectionStart) +
+          "\n" +
+          inputValue.substring(selectionEnd);
+  
+        // Update the state
+        setInputValue(newText);
+  
+        // Move cursor back to the correct position AFTER the state updates
+      //   setTimeout(() => {
+      //     inputRef.current.selectionStart = inputRef.current.selectionEnd =
+      //       selectionStart + 1;
+      //   }, 0);
+      // } else {
+      //   e.preventDefault();
+      //   handleSendMessage();
+      // }
+      setTimeout(() => {
+        e.target.selectionStart = e.target.selectionEnd = selectionStart + 1;
+      }, 0);
+    } else {
+      e.preventDefault();
       handleSendMessage();
+    }
     }
   };
   const typeBotMessage = (messageId, fullText, index) => {
@@ -228,7 +282,7 @@ const ChatSection = ({ onNewDiagram, conversation }) => {
     // 1. User message
     const userMessage = {
       id: Date.now(),
-      text: inputValue,
+      text: inputValue.trim(),
       author: "user",
       timestamp: new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -257,7 +311,7 @@ const ChatSection = ({ onNewDiagram, conversation }) => {
     try {
       const url = config.apiBaseUrl + "/bpmn/generate/";
       const response = await axios.post(
-      url,
+        url,
       {
         message: userMessage.text,
         encrypted_id: encryptedID
@@ -285,9 +339,9 @@ const ChatSection = ({ onNewDiagram, conversation }) => {
   };
 
   
-  const inputRef = useRef(null); // Add this ref for the input field
+  const inputRef = useRef(null); //  this ref for the input field
 
-  // Add useEffect for auto-focus
+  // for auto-focus
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
@@ -306,7 +360,8 @@ const ChatSection = ({ onNewDiagram, conversation }) => {
     setOpenConfirmDialog(false);
     try {
       const token = await refreshAccessToken();
-      await axios.delete(`${config.apiBaseUrl}/bpmn/conversation/${encryptedID}`, 
+      const url = config.apiBaseUrl + "/bpmn/conversation/" + encryptedID;
+      await axios.delete(url, 
         {
           headers: { 
             "Content-Type": "application/json",
@@ -340,7 +395,7 @@ const ChatSection = ({ onNewDiagram, conversation }) => {
     
     {/* Avatar */}
     <Avatar
-      src={ChatBotIcon} // Replace this with the path to your image/logo
+      src={ChatBotIcon} // 
       alt="Folia Logo"
       sx={{ width: 30, height: 30, mr: 1 }} // Adjust size and spacing
     />
@@ -434,37 +489,70 @@ const ChatSection = ({ onNewDiagram, conversation }) => {
       </MessagesContainer>
 
       {/* Input & Send */}
-      <InputContainer>
-  {/* Attachment Button */}
-          {/* <IconButton component="label">
-            <AttachFileIcon />
-            <input
-              type="file"
-              hidden
-              onChange={handleFileUpload} // Logic for processing the uploaded file
+  {/* Input & Send */}
+        <InputContainer
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          padding: "8px",
+          border: "1px solid #ccc",   
+          backgroundColor: "#fff",
+          width: "100%",
+         // height: "60px", // FIXED HEIGHT (prevents resizing)
+         maxHeight: "90px", // FIXED HEIGHT (prevents resizing)
+          overflow: "auto", // Ensures no expansion
+        }}
+       
+        >
+    {/* Attachment Button */}
+            {/* <IconButton component="label">
+              <AttachFileIcon />
+              <input
+                type="file"
+                hidden
+                onChange={handleFileUpload} // Logic for processing the uploaded file
+              />
+            </IconButton> */}
+  
+            {/* Message Input */}
+            <TextField
+              variant="outlined"
+              placeholder="Type your message..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              size="small"
+              fullWidth
+              multiline // Allows multiple lines
+              height=""
+              inputRef={inputRef} // Add this ref for the input field
+              sx={{
+                "& .MuiInputBase-root": {
+                  //height: "40px", // Keeps text field fixed height
+                  maxHeight: "60px", // Restricts height
+                  display: "flex",
+                  alignItems: "center",
+                },
+                "& textarea": {
+                  overflow: "hidden", // Prevents dynamic growing
+                 // resize: "none", // Blocks manual resizing
+                  maxHeight: "60px", // Restricts height
+                  lineHeight: "20px",
+                },
+              }}
+  
+             
             />
-          </IconButton> */}
-
-          {/* Message Input */}
-          <TextField
-            variant="outlined"
-            placeholder="Type your message..."
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            size="small"
-            fullWidth
-          />
-
-          {/* Send Button */}
-          <IconButton
-            color="primary"
-            onClick={handleSendMessage}
-            sx={{ marginLeft: 1 }}
-          >
-            <SendIcon />
-          </IconButton>
-      </InputContainer>
+  
+            {/* Send Button */}
+            <IconButton
+              color="primary"
+              onClick={handleSendMessage}
+              sx={{ marginLeft: 1 }}
+            >
+              <SendIcon />
+            </IconButton>
+        </InputContainer>
 
   <Dialog
     open={openConfirmDialog}

@@ -15,10 +15,10 @@ import {
     Typography
 } from "@mui/material";
 import BpmnViewerComponent from "./BpmnViewer.jsx";
-import React, {useEffect, useState} from "react";
+import React, { useEffect, useState } from "react";
 import Grid from '@mui/material/Grid2';
-import {useParams} from "react-router-dom";
-import {refreshAccessToken} from "./auth.jsx";
+import { useParams } from "react-router-dom";
+import { refreshAccessToken } from "./auth.jsx";
 import axios from "axios";
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RestoreIcon from '@mui/icons-material/Restore';
@@ -59,17 +59,17 @@ function BpmnVersionsModule() {
         );
 
 
-            setBpmnVersions(response.data.versions);
-            if(response.data.versions.length > 0){
-                setDiagramXml(response.data.versions[0].bpmn_xml);
-            }
+        setBpmnVersions(response.data.versions);
+        if (response.data.versions.length > 0) {
+            setDiagramXml(response.data.versions[0].bpmn_xml);
+        }
 
         console.log(response.data.versions);
 
     };
 
 
-       const handleRestoreDiagram = async () => {
+    const handleRestoreDiagram = async () => {
 
         try {
             const token = await refreshAccessToken()
@@ -99,8 +99,7 @@ function BpmnVersionsModule() {
                 console.log("Response:", response.data);
                 //go to path /homepage/bpmn/${encryptedID}
                 window.location.href = `/homepage/bpmn/${encryptedID}`;
-            }else
-            {
+            } else {
                 console.error("Failed to save BPMN XML to the server.");
             }
 
@@ -118,92 +117,92 @@ function BpmnVersionsModule() {
 
     //datetime to string
     const formatDate = (date) => {
-      return date.toISOString().split('T')[0];
-     }
+        return date.toISOString().split('T')[0];
+    }
 
 
 
     return (
         <React.Fragment>
-        <div>
-            <div style={{flex: "0 0 10%", height: "10%"}}>
-                <NavigationBar username=""/>
+            <div>
+                <div style={{ flex: "0 0 10%", height: "10%" }}>
+                    <NavigationBar username="" />
+                </div>
+
+                <div style={{ height: "90%", marginTop: '80px', padding: '10px' }}>
+                    <Grid container spacing={2}>
+                        <Grid size={3}>
+
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    justifyContent: "center",
+                                    alignItems: "center",
+                                    marginLeft: "10px",
+
+                                }}>
+                                {bpmnVersions.map((bpmnVersion, index) => (
+                                    <div key={index}
+                                        style={{
+                                            marginBottom: "10px",
+                                            borderRadius: "10px",
+                                            width: "100%"
+                                        }}
+                                    >
+                                        <Card key={index}
+                                            onClick={() => {
+                                                setDiagramXml(bpmnVersion.bpmn_xml)
+                                            }
+
+                                            }
+                                        >
+                                            <CardContent>
+                                                <Typography variant="h5" component="h2">
+                                                    Version: {bpmnVersion.version_name}
+                                                </Typography>
+                                                <Typography color="textSecondary">
+                                                    Created on: {formatDate(new Date(bpmnVersion.created_at))}
+                                                </Typography>
+                                            </CardContent>
+                                            <CardActions>
+                                                <Stack direction="row" spacing={1} alignItems='flex-end'>
+                                                    {/*<IconButton aria-label="delete">*/}
+                                                    {/*    <DeleteIcon />*/}
+                                                    {/*</IconButton>*/}
+                                                    <IconButton
+                                                        aria-label="restore"
+                                                        onClick={() => {
+                                                            setVersionID(bpmnVersion.id);
+
+                                                            console.log("version id:", bpmnVersion.id);
+                                                            handleClickOpen();
+                                                        }}
+                                                    >
+                                                        <RestoreIcon />
+                                                    </IconButton>
+
+                                                    <IconButton
+                                                        aria-label="visibility"
+                                                        onClick={() => setDiagramXml(bpmnVersion.bpmn_xml)}
+                                                    >
+                                                        <VisibilityIcon />
+                                                    </IconButton>
+
+                                                </Stack>
+                                            </CardActions>
+                                        </Card>
+                                    </div>
+                                ))}
+                            </div>
+                        </Grid>
+                        <Grid size="grow">
+                            {<BpmnViewerComponent diagramXml={diagramXml} />}
+                        </Grid>
+                    </Grid>
+                </div>
+
             </div>
-
-         <div style={{ height: "90%",marginTop:'80px',padding:'10px'}}>
-             <Grid container spacing={2}>
-                 <Grid size={3}>
-
-                     <div
-                            style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                marginLeft: "10px",
-
-                         }}>
-                         {bpmnVersions.map((bpmnVersion, index) => (
-                             <div key={index}
-                             style={{
-                                    marginBottom: "10px",
-                                    borderRadius: "10px",
-                                    width: "100%"
-                             }}
-                             >
-                                 <Card key={index}
-                                       onClick={() => {
-                                           setDiagramXml(bpmnVersion.bpmn_xml)
-                                       }
-
-                                       }
-                                 >
-                                     <CardContent>
-                                         <Typography variant="h5" component="h2">
-                                             Version: {bpmnVersion.version_name}
-                                         </Typography>
-                                         <Typography color="textSecondary">
-                                             Created on: {formatDate(new Date(bpmnVersion.created_at))}
-                                         </Typography>
-                                     </CardContent>
-                                     <CardActions>
-                                         <Stack direction="row" spacing={1} alignItems='flex-end'>
-                                             {/*<IconButton aria-label="delete">*/}
-                                             {/*    <DeleteIcon />*/}
-                                             {/*</IconButton>*/}
-                                             <IconButton
-                                                 aria-label="restore"
-                                                 onClick={() => {
-                                                        setVersionID(bpmnVersion.id);
-
-                                                     console.log("version id:", bpmnVersion.id);
-                                                        handleClickOpen();
-                                                 }}
-                                             >
-                                                 <RestoreIcon />
-                                             </IconButton>
-
-                                            <IconButton
-                                                aria-label="visibility"
-                                                onClick={() => setDiagramXml(bpmnVersion.bpmn_xml)}
-                                            >
-                                                 <VisibilityIcon />
-                                             </IconButton>
-
-                                         </Stack>
-                                     </CardActions>
-                                 </Card>
-                             </div>
-                         ))}
-                     </div>
-                 </Grid>
-                 <Grid size="grow">
-                     {<BpmnViewerComponent diagramXml={diagramXml}/>}
-                 </Grid>
-             </Grid>
-         </div>
-
-        </div>
             <Dialog
                 open={open}
                 onClose={handleClose}

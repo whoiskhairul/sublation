@@ -87,7 +87,6 @@ function Studio() {
         setNotifOpen(false);
     };
 
-    console.log("permissions", permissions);
     return (
         <div>
             {/* NAVBAR */}

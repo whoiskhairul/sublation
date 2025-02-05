@@ -1,47 +1,83 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import './LandingPage.css'; // Import CSS for styling
-import logo from '../assets/logo.png'; // Ensure the path matches your logo file
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import "./LandingPage.css";
+import logo from "../assets/logo.png"; // Ensure correct path
+import healthcareImage from "../assets/landing.jpg"; // Ensure correct path
+
+// Material UI Icons
+import AutoGraphIcon from "@mui/icons-material/AutoGraph"; // AI-Powered BPMN
+import IntegrationInstructionsIcon from "@mui/icons-material/IntegrationInstructions"; // Seamless Integration
+import GroupsIcon from "@mui/icons-material/Groups"; // Collaboration
+import VerifiedUserIcon from "@mui/icons-material/VerifiedUser"; // Compliance & Security
+import Header from "./Header";
 
 const LandingPage = () => {
   const navigate = useNavigate();
 
   const handleGetStartedClick = () => {
-      navigate('/login');
+    navigate("/login");
   };
 
   return (
-      <div className="app-container">
-          <header className="app-header">
-              <div className="logo-container">
-                  <img src={logo} alt="Folia Logo" className="logo-image" />
-                  <span className="logo-text">Folia</span>
-              </div>
-              <nav className="nav-links">
-                  <a href="#product">Product</a>
-                  <a href="#services">Services</a>
-                  <a href="#pricing">Pricing</a>
-                  <a href="#tutorial">Tutorial</a>
-              </nav>
-              <button className="get-started-button" onClick={handleGetStartedClick}>
-                  Get Started
-              </button>
-          </header>
-          <main className="app-main">
-              <h1 className="main-title">Welcome To Folia</h1>
-              <p className="main-subtitle">Your Smart BPMN Assistant for Healthcare</p>
-              
-              <div className="chat-bar-container">
-                  <img src={logo} alt="Folia Logo" className="logo-image" />
-                  <input
-                      type="text"
-                      placeholder="Tell Folia what you need..."
-                      className="chat-input"
-                  />
-                  <button className="send-button">➤</button>
-              </div>
-          </main>
-      </div>
+    <div>
+      <Header/>
+    <div className="landing-container">
+      
+      
+      {/* Hero Section */}
+      <section className="hero">
+        <div className="hero-content">
+          <h1>Smart BPMN Solution for Healthcare</h1>
+          <p>Generate workflows, optimize processes, and enhance collaboration for the healthcare administration.</p>
+          <button className="btn-primary" onClick={handleGetStartedClick}>
+            Get Started
+          </button>
+        </div>
+        <div className="hero-image">
+          <img src={healthcareImage} alt="Healthcare Workflow" />
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="features">
+        <h2>Why Choose Folia?</h2>
+        <div className="feature-grid">
+          <div className="feature-item">
+            <AutoGraphIcon className="feature-icon" />
+            <h3>AI-Powered BPMN Generation</h3>
+            <p>Generate BPMN workflows instantly using AI-driven technology.</p>
+          </div>
+          <div className="feature-item">
+            <IntegrationInstructionsIcon className="feature-icon" />
+            <h3>Smart Process Optimization</h3>
+            <p>Optimize workflows for higher efficiency</p>
+          </div>
+          <div className="feature-item">
+            <VerifiedUserIcon className="feature-icon" />
+            <h3>Real-time BPMN Error Handling</h3>
+            <p>Detect and resolve errors or bottlenecks in real time.</p>
+          </div>
+          <div className="feature-item">
+            <GroupsIcon className="feature-icon" />
+            <h3>Seamless Collaboration</h3>
+            <p>Ensuring team alignment and enhanced productivity with seamless multiuser collaboration.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Call to Action */}
+      <section className="cta">
+        <h2>Revolutionizing Healthcare Administration</h2>
+        <p>Join the magnificent era of Artificial Intelligence</p>
+        <button className="btn-primary" onClick={handleGetStartedClick}>
+          Try Now
+        </button>
+      </section>
+      <footer className="footer">
+      This website has been developed as part of the Web Engineering Planspiel Project offered at TU Chemnitz.
+    </footer>
+    </div>
+    </div>
   );
 };
 

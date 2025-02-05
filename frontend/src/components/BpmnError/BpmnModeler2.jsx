@@ -1,17 +1,26 @@
-
+// src/BpmnModeler.js
 import React, { useEffect, useRef, useState } from "react";
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import axios from "axios"; // Import Axios
 import "bpmn-js/dist/assets/diagram-js.css";
 import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import { useParams } from "react-router-dom";
+import SaveVersionDialog from "../SaveVersion.jsx";
+import Modal from '@mui/material/Modal';
 
-import { Fullscreen, FullscreenExit, ZoomIn, ZoomOut, FitScreen, Replay } from '@mui/icons-material';
+import { Fullscreen, FullscreenExit, ZoomIn, ZoomOut, FitScreen, Replay, NorthWestSharp } from '@mui/icons-material';
 import { Tooltip, IconButton } from "@mui/material";
+import { Button, TextareaAutosize } from '@mui/material';
+import { Save, FileCopy, Edit, GetApp } from '@mui/icons-material';
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import errorIconImg from '../../assets/error_icon.png'; // Import error icon image
+import loadingIconImg from '../../assets/loading.png'; 
 
 
-
-import BpmnToolbar from "../BpmnToolbar";
+import config from '../../config';
+import BpmnToolbar from "./BpmnToolbar";
 import NotificationSnackBar from "../NotificationSnackbar";
 import { handlePrint } from "../../utils/handlePrint";
 import '../BpmnModeler.css';
@@ -19,46 +28,40 @@ import '../BpmnModeler.css';
 
 
 import { refreshAccessToken } from "../auth";
-
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import errorIconImg from '../../assets/error_icon.png'; // Import error icon image
-import config from "../../config";
-
+import saveVersion from "../SaveVersion.jsx";
 
 const DEFAULT_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-                  xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd"
-                  id="Definitions_1"
-                  targetNamespace="http://bpmn.io/schema/bpmn">
-  <bpmn:process id="Process_1" isExecutable="false">
-    <bpmn:startEvent id="StartEvent_1"/>
-  </bpmn:process>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd">
+  <bpmn:process id="Process_1" isExecutable="false" />
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
-      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
-        <dc:Bounds x="173" y="102" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1" />
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
 const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
   const { encryptedID } = useParams();
-  const [bpmnXML, setBpmnXML] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
-
-  const [errorMessages, setErrorMessages] = useState([]);
-  // STATE FOR START AND END EVENT ERRORS
-  const [diagramWarnings, setDiagramWarnings] = useState("");
+  const [users, setUsers] = useState([]); // Store the list of users
+  const [activeUserList, setActiveUserList] = useState([]);
 
   const containerRef = useRef(null);
   const modelerRef = useRef(null);
+
+  const [errorMessages, setErrorMessages] = useState([]);
+  const [showErrors, setShowErrors] = useState(false); // State to toggle visibility
+
+  // STATE FOR START AND END EVENT ERRORS
+  const [diagramWarnings, setDiagramWarnings] = useState("");
+
+  const [modelOpen, setModalOpen] = React.useState(false);
+  const handleOpenModal = () => {
+    setModalOpen(true);
+  };
+  const handleCloseModal = () => {
+    setModalOpen(false);
+  };
+
+
 
   useEffect(() => {
     modelerRef.current = new BpmnModeler({
@@ -66,11 +69,11 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       width: "100%",
       height: "100%",
     });
-
     // Expose the modeler instance globally
     window.bpmnModeler = modelerRef.current;
 
     modelerRef.current.on("commandStack.changed", handleRealTimeValidation); //real time update 1
+
 
 
     return () => {
@@ -90,7 +93,6 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
         console.log("BPMN diagram successfully imported or updated.");
         handleRealTimeValidation(); // Initial 
         showDiagramWarnings(); // Check and show warnings on diagram load
-
 
       },
       (err) => {
@@ -117,67 +119,190 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
   };
 
   const socketRoomId = cleanString(encryptedID);
-  console.log('socketRoomId:', socketRoomId.length);
-  console.log('encryptedID:', encryptedID);
+
+  const socket = useRef(null); // WebSocket reference
+  const [cursors, setCursors] = useState({}); // Store other users' cursor positions
+  const colors = [
+    "#FF5733", // Deep Red
+    "#33FF57", // Deep Green
+    "#3357FF", // Deep Blue
+    "#FF33A1", // Deep Pink
+    "#FF8C33", // Deep Orange
+    "#8C33FF", // Deep Purple
+    "#33FFF5", // Deep Cyan
+    "#FF3333", // Deep Crimson
+    "#33FF8C", // Deep Mint
+    "#FF33D4"  // Deep Magenta
+  ];
+
+  const userColor = useRef(colors[Math.floor(Math.random() * colors.length)]); // Unique color for the user's cursor
+
+  const localStorageUser = localStorage.getItem('user');
+  const localStorageUserObject = localStorageUser ? JSON.parse(localStorageUser) : null;
+  const userId = useRef(localStorageUserObject ? localStorageUserObject.username : `Guest_${Math.floor(Math.random() * 1000)}`);
+
 
   useEffect(() => {
+    // Initialize WebSocket
     const socketUrl = config.socketBaseurl + '/ws/bpmn/' + socketRoomId + '/';
     socket.current = new WebSocket(socketUrl);
 
-    socket.onopen = () => {
+    socket.current.onopen = () => {
       console.log('WebSocket connection opened');
+      // Notify others of the new user
+      socket.current.send(JSON.stringify({ action: 'user_joined', user: userId.current }));
     };
 
-    socket.onmessage = (event) => {
+    socket.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      setBpmnXML(data.xml);  // Update diagram XML
+      const commandStack = modelerRef.current?.get('commandStack');
+      const elementRegistry = modelerRef.current?.get('elementRegistry');
 
-      modelerRef.current.importXML(data.xml).then(
-        () => {
-          // console.log("BPMN diagram updated with new XML data.");
-        },
-        (err) => {
-          console.error("Failed to update BPMN diagram with new XML data.", err);
+      if (data.action === 'update_cursor' && data.user !== userId.current) {
+        // Update cursor position for a user
+        setCursors((prev) => ({
+          ...prev,
+          [data.user]: { x: data.position.x, y: data.position.y, color: data.color },
+        }));
+      } else if (data.action === 'remove_cursor') {
+        // Remove cursor when a user disconnects
+        setCursors((prev) => {
+          const updatedCursors = { ...prev };
+          delete updatedCursors[data.user];
+          return updatedCursors;
+        });
+      } else if (data.action === 'update_xml' && data.user !== userId.current) {
+        // Handle BPMN diagram updates
+        console.log(data.user, userId.current);
+        modelerRef.current?.importXML(data.xml).then(
+          () => {
+            console.log("BPMN diagram updated with new XML data.");
+            handleRealTimeValidation(); //real time update 1
+
+
+          },
+          (err) => {
+            console.error("Failed to update BPMN diagram with new XML data.", err);
+          }
+
+        );
+      } else if (data.action === 'update_element') {
+        // Update or add element via commandStack
+        console.log('update_element:', data);
+        const existingElement = elementRegistry?.get(data.element.id);
+        if (existingElement) {
+          commandStack.execute('element.updateProperties', {
+            element: existingElement,
+            properties: data.element.properties,
+          });
+        } else {
+          const rootElement = modelerRef.current?.get('canvas').getRootElement();
+          commandStack.execute('shape.create', {
+            parent: rootElement,
+            shape: {
+              id: data.element.id,
+              type: data.element.type,
+              x: data.element.position.x,
+              y: data.element.position.y,
+              businessObject: modelerRef.current?.get('moddle').create(data.element.type),
+            },
+          });
         }
-      );
+      } else if (data.action === 'remove_element') {
+        // Remove an element via commandStack
+        const elementToRemove = elementRegistry?.get(data.elementId);
+        if (elementToRemove) {
+          commandStack.execute('elements.delete', {
+            elements: [elementToRemove],
+          });
+        }
+      } else if (data.action === 'user_joined' && data.user !== userId.current) {
+        // Add new user to the list
+        setUsers((prev) => {
+          if (!prev.includes(data.user)) {
+            return [...prev, data.user];
+          }
+          return prev;
+        });
+        setNotifMessage(`${data.user} has joined the room.`);
+        setNotifSeverity('info');
+        setOpen(true);
+      } else if (data.action === 'user_left') {
+        // Remove user from the list
+        setUsers((prev) => prev.filter((user) => user !== data.user));
+        setCursors((prev) => {
+          const updatedCursors = { ...prev };
+          delete updatedCursors[data.user];
+          return updatedCursors;
+        });
+        setNotifMessage(`${data.user} has left the room.`);
+        setNotifSeverity('info');
+        setOpen(true);
+      }
     };
 
-    socket.onerror = (error) => {
+    socket.current.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
 
-    socket.onclose = (event) => {
+    socket.current.onclose = (event) => {
       console.warn('WebSocket closed:', event);
+      // Only attempt to send if the connection is still open
+      if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+        socket.current.send(JSON.stringify({ action: 'user_left', user: userId.current }));
+      }
+    };
+
+    const handleMouseMove = (event) => {
+      const boundingRect = modelerRef.current._container.getBoundingClientRect();
+      const x = event.clientX - boundingRect.left;
+      const y = event.clientY - boundingRect.top;
+
+      // Broadcast cursor position
+      socket.current.send(
+        JSON.stringify({
+          action: 'update_cursor',
+          user: userId.current,
+          position: { x, y },
+          color: userColor.current,
+        })
+      );
     };
 
     const handleModelerChange = async () => {
-      // console.log("Modeler change detected.");
       if (!modelerRef.current) return;
       try {
         const { xml } = await modelerRef.current.saveXML({ format: true });
-        socket.send(JSON.stringify({ 'xml': xml }));
+        socket.current.send(JSON.stringify({ action: 'update_xml', xml, user: userId.current }));
+        modelerRef.current.on("commandStack.changed", handleRealTimeValidation); //real time update 1
       } catch (error) {
         console.error("Failed to send BPMN XML via WebSocket:", error);
       }
     };
 
-    const registerModelerChange = () => {
+    const registerModelerEvents = () => {
       if (modelerRef.current) {
         const eventBus = modelerRef.current.get('eventBus');
         eventBus.on('commandStack.changed', handleModelerChange);
+        modelerRef.current._container.addEventListener('mousemove', handleMouseMove); // Track mouse movements
       }
     };
 
-    registerModelerChange();
+    registerModelerEvents();
 
     return () => {
       if (modelerRef.current) {
         const eventBus = modelerRef.current.get('eventBus');
         eventBus.off('commandStack.changed', handleModelerChange);
+        modelerRef.current._container.removeEventListener('mousemove', handleMouseMove);
       }
-      socket.close();  // Clean up WebSocket when component unmounts
+      if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+        socket.current.send(JSON.stringify({ action: 'user_left', user: userId.current }));
+        socket.current.close();
+      }
     };
-  }, [encryptedID]);
+  }, [socketRoomId]);
+
 
   const handleZoomIn = () => {
     if (!modelerRef.current) return;
@@ -247,17 +372,13 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
             setNotifSeverity('success');
             setOpen(true);
           }
-          else if (response.status === 500) {
-            console.log(response.data.status);
-
-          }
           else {
             console.error("Failed to save BPMN XML to the server.");
           }
         } catch (error) {
 
           // console.error("Failed to save BPMN XML:", error.response.status);
-          const reply = error.response.data.reply;
+          const reply = error.response.data.reply? error.response.data.reply: 'Something went wrong.';
           setNotifMessage(reply);
           setNotifSeverity('error');
           setOpen(true);
@@ -271,6 +392,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
   };
   const [open, setOpen] = useState(false);
   const [notifMessage, setNotifMessage] = useState('');
+  const [showUsers, setShowUsers] = useState(false);
   const [notifSeverity, setNotifSeverity] = useState('success');
 
   const handleClose = (event, reason) => {
@@ -358,7 +480,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
   //       const token = await refreshAccessToken();
 
   //       await axios.put(
-  //         `http://127.0.0.1:8000/bpmn/save-bpmn/${encryptedID}`,
+  //         `${config.apiBaseUrl}/bpmn/save-bpmn/${encryptedID}`,
   //         {
   //           bpmn_xml: xml,
   //           bpmn_svg: svg,
@@ -401,9 +523,10 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       setIsFullscreen(false);
     }
   };
-  // Real-time validation for BPMN diagram
+
   // REAL-TIME VALIDATION FOR START AND END EVENT ERRORS
   const handleRealTimeValidation = async () => {
+    console.log("Real-time validation triggered.");
     if (!modelerRef.current) return;
 
     const overlays = modelerRef.current.get("overlays");
@@ -449,16 +572,15 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
             tooltip.style.position = "absolute";
             tooltip.style.backgroundColor = "rgb(243, 239, 117)";
             tooltip.style.color = "black";
-            tooltip.style.padding = "5px"; // Reduced padding
-            tooltip.style.fontSize = "12px"; // Smaller font size
+            tooltip.style.padding = "10px";
             tooltip.style.borderRadius = "5px";
             tooltip.style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
             tooltip.style.display = "none";
             tooltip.style.zIndex = "1000";
             tooltip.innerHTML = `
-            <strong>Error: ${error.message}</strong><br/>
-            <i>Suggestion: ${error.suggestion}</i>
-          `;
+              <strong>Error: ${error.message}</strong><br/>
+              <i>Suggestion: ${error.suggestion}</i>
+            `;
             document.body.appendChild(tooltip);
 
             errorIcon.addEventListener("mouseenter", (event) => {
@@ -514,6 +636,87 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
   };
 
 
+  const onTimeLineClickHandler = () => {
+    //route to  /bpmn-versions/:encryptedID
+    window.location.href = `/bpmn-versions/${encryptedID}`;
+
+  };
+
+
+  const showDialogToSaveVersion = () => {
+    handleOpenModal();
+  }
+
+
+
+  const handleSaveAS = async (data) => {
+
+
+    if (!modelerRef.current) return;
+
+    modelerRef.current.saveXML({ format: true }).then(
+        async ({ xml }) => {
+          try {
+            const { svg } = await modelerRef.current.saveSVG({ format: true });
+            const token = await refreshAccessToken()
+            console.log('data:', data);
+            console.log('token:', token);
+            console.log('xml:', xml);
+            console.log('svg:', svg);
+            //
+            // diagram_id = request.data.get('diagram_id')
+            // new_bpmn_xml = request.data.get('bpmn_xml')
+            // version_name = request.data.get('version_name')
+
+            const formData = new FormData();
+            formData.append("diagram_id", encryptedID);
+            formData.append("bpmn_xml", xml);
+            formData.append("version_name", data);
+
+            const url = config.apiBaseUrl + "/bpmn/save-diagram-version/";
+            const response = await axios.post(
+                url,
+                {
+                  diagram_id: encryptedID,
+                  bpmn_xml: xml,
+                  version_name: data,
+                  svg: svg
+                },
+                {
+                  headers: {
+                    "Authorization": `Bearer ${token}`, // Bearer token in headers
+                    "Content-Type": "application/json",
+                  }
+                }
+            );
+
+            if (response.status === 200) {
+              console.log("Response:", response.data);
+              setNotifMessage(`BPMN Diagram saved as ${data}.`);
+              setNotifSeverity('success');
+              setOpen(true);
+            }else
+            {
+              console.error("Failed to save BPMN XML to the server.");
+              setNotifSeverity('error');
+              setNotifMessage(`Failed to save.`);
+              setOpen(true);
+            }
+
+          } catch (error) {
+            console.log("Error saving BPMN XML:", error);
+            setNotifSeverity('error');
+            setNotifMessage(`Failed to save.`);
+            setOpen(true);
+
+          }
+        },
+        (err) => {
+          console.error("Error saving BPMN XML:", err);
+        }
+    );
+  }
+
 
   // Function to display warnings if Start or End events are missing
   const showDiagramWarnings = () => {
@@ -553,10 +756,76 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
     warningContainer.style.display = "block";
   };
 
+
+    const [documentation, setDocumentation] = useState('');
+    const [openDoc, setOpenDoc] = useState(false);
+    const [isLoadingDoc, setIsLoadingDoc] = useState(false);    
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedText, setEditedText] = useState('');
+
+    const handleGenerateDocumentation = async () => {
+
+      setOpenDoc(true);  // Show modal immediately when button is clicked
+      setIsLoadingDoc(true); // Show loading state
+  
+        try {
+            // Send request to documentation API
+            const token = await refreshAccessToken();
+            const url = config.apiBaseUrl + "/bpmn/generate-bpmn-documentation/";
+            const response = await axios.post(
+             url,
+              { encrypted_id: encryptedID }
+                
+            );
+
+            if (response.status === 200) {
+                setDocumentation(response.data.reply);
+                setEditedText(response.data.reply);
+                setOpenDoc(true);
+                //console.log('Documentation generated:', response.data.reply);
+            } else {
+                console.error('Failed to generate documentation:', response.data.error);
+            }
+        } catch (error) {
+            console.error('Error generating documentation:', error);
+        }finally {
+          setIsLoadingDoc(false); // Remove loading state when response arrives
+      }
+    };
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(editedText);
+    };
+
+    const handleDocumentationExport = () => {
+        const blob = new Blob([editedText], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = 'BPMN_Documentation.txt';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "85vh" }}>
       <div style={{ position: "relative" }}>
         {/* Toolbar */}
+        <Modal open={modelOpen} onClose={handleCloseModal} aria-labelledby="modal-modal-title" aria-describedby="modal-modal-description">
+            {/*<SaveVersionDialog*/}
+            {/*    isOpen={modelOpen}*/}
+            {/*    onClose={handleCloseModal}*/}
+            {/*    onSubmit={handleSaveAS}*/}
+            {/*/>*/}
+          <SaveVersionDialog
+              isOpen={modelOpen}
+              onClose={handleCloseModal}
+              onSubmit={handleSaveAS}
+          />
+        </Modal>
+
+
+
         <BpmnToolbar
           diagramName={diagramName}
           permissions={permissions}
@@ -565,9 +834,14 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
           onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={handleReset}
           onUndo={handleUndo} onRedo={handleRedo}
           onPrint={handlePrintClick}
+          users={users}
+          showUsers={showUsers}
+          setShowUsers={setShowUsers}
+          onTimeLineClick={onTimeLineClickHandler}
+          onSaveAsClick={showDialogToSaveVersion}
         />
         {/* START AND END EVENT ERRORS */}
-        {diagramWarnings && (
+        {/* {diagramWarnings && (
           <div
             style={{
               backgroundColor: "red",
@@ -579,7 +853,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
           >
             {diagramWarnings}
           </div>
-        )}
+        )} */}
         <div
           ref={containerRef}
           style={{
@@ -587,9 +861,281 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
             border: "1px solid #ccc",
             height: "75vh",
             position: "relative",
-            backgroundColor: "white"
+            backgroundColor: "white",
+            backgroundImage: "radial-gradient(circle, #dbdbdb 1px, rgba(0, 0, 0, 0) 1px)",
+            backgroundSize: "20px 20px"
           }}
         >
+
+<div
+            className="indicatior-row"
+            style={{
+              display: "flex",
+              flexDirection: "row", // Ensure they are side by side
+              position: "absolute", // Position them relative to the diagram-area
+              top: "10px", // Adjust to be near the top
+              right: "10px", // Adjust to be near the right
+              gap: "10px", // Add spacing between the two indicators
+              zIndex: 1000, // Ensure they appear above other elements
+            }}
+          >
+
+            {/* Error Indicator */}
+            <div
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                setShowErrors((prev) => !prev); // Toggle error list visibility
+                if (showUsers) setShowUsers(false); // Close user indicator if open
+              }}
+
+            >
+              ⛔{errorMessages.length} {/* Total number of errors */}
+            </div>
+
+      {/* Display error list when toggled */}
+      {showErrors && errorMessages.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "50px", // Position below the error indicator
+            right: "0",
+            backgroundColor: "#ffffff",
+            borderRadius: "8px",
+            padding: "10px",
+            boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+            zIndex: 1000,
+            maxHeight: "200px", // Limit height for long lists
+            overflowY: "auto", // Scroll for long lists
+            transition: "transform 0.3s ease-in-out",
+            width: "300px", // Width of the error list
+
+            /* Scrollbar Styling */
+            scrollbarWidth: "thin", // Modern scrollbar for Firefox
+            scrollbarColor: "#c0c0c0 #f0f0f0", // Thumb and track colors
+
+
+          }}
+          onMouseLeave={()=>{if (showErrors) setShowErrors(false)}} // Hide error list on mouse leave
+
+
+        >
+          <strong
+            style={{
+              display: "block",
+              marginBottom: "10px",
+              fontSize: "1rem",
+              color: "#721c24",
+            }}
+          >
+            Errors ({errorMessages.length}): {/* Total number of errors */}
+          </strong>
+          <ul
+            style={{
+              listStyleType: "none",
+              padding: 0,
+              margin: 0,
+              overflow: "hidden",
+            }}
+          >
+            {errorMessages.map((error, index) => (
+              <li
+                key={index}
+                style={{
+                  color: "#721c24",
+                  marginBottom: "10px",
+                  fontSize: "0.875rem",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "5px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "1rem",
+                    color: "#721c24",
+                    fontWeight: "bold",
+                  }}
+                >
+                  ⛔
+                </span>
+                <div>
+                  <strong>Element:</strong> {error.elementId || "Unknown"}
+                  <br />
+                  <strong>Message:</strong> {error.message}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+
+            {/* /* User presence indicator */}
+            <div
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                cursor: "pointer",
+              }}
+            >
+              <div
+                onClick={() => {
+                  setShowUsers((prev) => !prev); // Toggle user list visibility
+                  if (showErrors) setShowErrors(false); // Close error indicator if open
+                }}
+
+                style={{
+                  backgroundColor: "#ffffff",
+                  borderRadius: "50%",
+                  width: "40px",
+                  height: "40px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                  cursor: "pointer",
+                }}
+              >
+                <strong style={{ color: "#333" }}>👤{users.length}</strong>
+              </div>
+              {showUsers && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "50px",
+                    right: "0",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "8px",
+                    padding: "10px",
+                    boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                    zIndex: 1000,
+                    transition: "transform 0.3s ease-in-out",
+
+                  }}
+                  onMouseLeave={()=>{if (showUsers) setShowUsers(false)}} // Hide user list on mouse leave
+                >
+                  <strong style={{ display: "block", marginBottom: "5px", color: "#333" }}>
+                    Users:
+                  </strong>
+                  <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
+                    {users.map((user) => (
+                      <li
+                        key={user}
+                        style={{
+                          color: user === userId.current ? "#1976d2" : "#555",
+                          fontWeight: user === userId.current ? "bold" : "normal",
+                          marginBottom: "5px",
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: "10px",
+                            height: "10px",
+                            borderRadius: "50%",
+                            backgroundColor: user === userId.current ? "#1976d2" : "#555",
+                            marginRight: "8px",
+                          }}
+                        ></span>
+                        {user}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+          </div>
+          {/* /* User presence indicator */}
+          {/* <div
+            style={{
+              position: "absolute",
+              top: "10px",
+              right: "10px",
+              zIndex: 1000,
+            }}
+          >
+            <div
+              onClick={() => setShowUsers((prev) => !prev)}
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                cursor: "pointer",
+              }}
+            >
+              <strong style={{ color: "#333" }}>{users.length}</strong>
+            </div>
+            {showUsers && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50px",
+                  right: "0",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "8px",
+                  padding: "10px",
+                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+                  zIndex: 1000,
+                  transition: "transform 0.3s ease-in-out",
+                }}
+              >
+                <strong style={{ display: "block", marginBottom: "5px", color: "#333" }}>
+                  Users:
+                </strong>
+                <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
+                  {users.map((user) => (
+                    <li
+                      key={user}
+                      style={{
+                        color: user === userId.current ? "#1976d2" : "#555",
+                        fontWeight: user === userId.current ? "bold" : "normal",
+                        marginBottom: "5px",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "50%",
+                          backgroundColor: user === userId.current ? "#1976d2" : "#555",
+                          marginRight: "8px",
+                        }}
+                      ></span>
+                      {user}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
           {/* Floating buttons container */}
           <div style={{
             backgroundColor: "#f1f1f1",
@@ -599,7 +1145,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
             alignItems: "center",
             padding: "5px",
             position: "absolute",
-            bottom: "125px",
+            bottom: "110px",
             right: "20px",
             display: "flex",
             flexDirection: "column",
@@ -633,12 +1179,33 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
                 </Tooltip>
               </IconButton> :
               <IconButton size="small" style={{ padding: '8px' }} onClick={handleFullscreen} >
-                <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}></Tooltip>
-                <Fullscreen style={{ fontSize: '20px' }} />
+                <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>
+                  <Fullscreen style={{ fontSize: '20px' }} />
+                </Tooltip>
               </IconButton>
 
             }
           </div>
+          {/* Render other users' cursors */}
+          {Object.keys(cursors).map((user) => (
+            <div
+              key={user}
+              style={{
+                position: "absolute",
+                left: `${cursors[user].x}px`,
+                top: `${cursors[user].y}px`,
+                pointerEvents: "none",
+                zIndex: 1000,
+                display: "flex",
+                alignItems: "center"
+              }}
+            >
+              <Tooltip title={localStorage.user}>
+                <NorthWestSharp style={{ color: cursors[user].color, fontSize: '20px' }} />
+              </Tooltip>
+              <span style={{ marginLeft: '5px', color: cursors[user].color, fontSize: '12px' }}>{user}</span>
+            </div>
+          ))}
         </div>
       </div>
       <NotificationSnackBar
@@ -647,11 +1214,71 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
         severity={notifSeverity}
         message={notifMessage}
       />
+
+          <div>
+        <Button variant="contained" color="primary" onClick={handleGenerateDocumentation}>
+            Generate Documentation
+        </Button>
+
+        <Modal open={openDoc} onClose={() => setOpenDoc(false)}>
+            <div style={{ 
+                backgroundColor: 'white', 
+                padding: '20px', 
+                margin: '5% auto', 
+                width: '60%', 
+                maxHeight: '80vh', 
+                borderRadius: '8px',
+                fontFamily: 'Arial, sans-serif',
+                fontSize: '12px',
+                color: 'black'              
+            }}>
+                <div
+                  style={{
+                    marginTop: "5px",
+                    marginBottom: "3px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    width: "100%",
+                  }}
+                >
+                    <h1 style={{ margin: 0 }}>BPMN Workflow Documentation</h1>
+                    <div>
+                        <IconButton onClick={handleCopy}><FileCopy /></IconButton>
+                        <IconButton onClick={handleDocumentationExport}><GetApp /></IconButton>
+                    </div>
+                </div>   
+
+                {/* Display Loading Text or Documentation */}
+                {isLoadingDoc ? (
+                    <div style={{ textAlign: 'center', fontSize: '18px', fontWeight: 'bold', marginTop: '20px', marginBottom: '20px' }}>
+                        <p>⏳Documentation Generating...</p>
+                    </div>
+                ) : (
+                    <TextareaAutosize
+                        value={isEditing ? editedText : documentation}
+                        onChange={(e) => setEditedText(e.target.value)}
+                        style={{
+                            width: '100%',
+                            height: '300px',
+                            padding: '10px',
+                            fontFamily: 'Arial, sans-serif',
+                            fontSize: '20px',
+                            color: 'black',
+                            resize: 'none',
+                            overflowY: 'auto',
+                            border: '1px solid #ddd',
+                            borderRadius: '5px'
+                        }}
+                        disabled={!isEditing}
+                    />  
+                )}
+            </div>
+        </Modal>
+    </div>
+
     </div>
   );
 };
 
 export default BpmnModelerComponent;
-
-
-

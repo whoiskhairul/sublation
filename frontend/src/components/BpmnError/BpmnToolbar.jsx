@@ -3,27 +3,25 @@ import React from 'react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
-import { refreshAccessToken } from './auth.jsx';
-import ShareDiagram from './ShareDiagram.jsx';
-import NotificationSnackBar from './NotificationSnackbar.jsx';
-import config from "../config.js";
+import { refreshAccessToken } from '../auth.jsx';
+import ShareDiagram from '../ShareDiagram.jsx';
+import NotificationSnackBar from '../NotificationSnackbar.jsx';
+import config from "../../config.js";
 
-import { AppBar, Toolbar, IconButton, Typography, Menu, MenuItem, Button, Tooltip, Paper, Chip, Divider, Alert, TextField, Backdrop, CircularProgress } from '@mui/material';
-import { Undo, Redo, FolderOpen, ZoomIn, ZoomOut, Share, FileDownload, Save, Edit, Replay, MoreVert, Timeline, BookmarkAdd, Build } from '@mui/icons-material';
+import { AppBar, Toolbar, IconButton, Typography, Menu, MenuItem, Button, Tooltip, Paper, Chip, Divider, Alert, TextField } from '@mui/material';
+import { Undo, Redo, FolderOpen, ZoomIn, ZoomOut, Share, FileDownload, Save, Edit, Replay, MoreVert,Timeline,BookmarkAdd} from '@mui/icons-material';
 import { Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 
-import RenameDiagramDialog from './updates/RenameDiagramDialog';
+import RenameDiagramDialog from '../updates/RenameDiagramDialog';
 
 import Modal from '@mui/material/Modal';
 import { FileCopy, GetApp } from '@mui/icons-material';
 import { TextareaAutosize } from '@mui/material';
-import { Description } from '@mui/icons-material';
-import { jsPDF } from "jspdf";
-
+import { Description  } from '@mui/icons-material';
 
 const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
     onSaveClick, onZoomIn, onZoomOut, onReset, onUndo, onRedo,
-    onPrint, onTimeLineClick, onSaveAsClick, onOptimizedXml }) => {
+    onPrint,onTimeLineClick,onSaveAsClick }) => {
     const { encryptedID } = useParams();
     const navigate = useNavigate();
     const [anchorEl, setAnchorEl] = React.useState(null);
@@ -31,185 +29,148 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
     const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
     const [anchorElExport, setAnchorElExport] = React.useState(null); // For Export dropdown
-
-    const [documentation, setDocumentation] = useState('');
-    const [openDoc, setOpenDoc] = useState(false);
-    const [isLoadingDoc, setIsLoadingDoc] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editedText, setEditedText] = useState('');
-    const [optidialog, setOptidialog] = useState(false);
-    const [isOptimizing, setIsOptimizing] = useState(false);
-
-    const handleGenerateDocumentation = async () => {
-
-        setOpenDoc(true);  // Show modal immediately when button is clicked
-        setIsLoadingDoc(true); // Show loading state
-
-        try {
-            // Send request to documentation API
-            const token = await refreshAccessToken();
-            const url = config.apiBaseUrl + "/bpmn/generate-bpmn-documentation/";
-            const response = await axios.post(
-                url,
-                { encrypted_id: encryptedID }
-
-            );
-
-            if (response.status === 200) {
-                setDocumentation(response.data.reply);
-                setEditedText(response.data.reply);
-                setOpenDoc(true);
-                //console.log('Documentation generated:', response.data.reply);
-            } else {
-                console.error('Failed to generate documentation:', response.data.error);
-            }
-        } catch (error) {
-            console.error('Error generating documentation:', error);
-        } finally {
-            setIsLoadingDoc(false); // Remove loading state when response arrives
-        }
-    };
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(editedText);
-    };
-
-    // const handleDocumentationExport = () => {
-    //     const blob = new Blob([editedText], { type: 'text/plain' });
-    //     const link = document.createElement('a');
-    //     link.href = window.URL.createObjectURL(blob);
-    //     link.download = 'BPMN_Documentation.txt';
-    //     document.body.appendChild(link);
-    //     link.click();
-    //     document.body.removeChild(link);
-    // }; 
-
-
-
-    const handleDocumentationExport = () => {
-        const doc = new jsPDF();
-
-        // Title
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(18);
-        doc.text("BPMN Documentation", 20, 20);
-
-        // Add the actual content
-        const content = editedText.trim(); // Ensure text is not empty
-        if (content.length === 0) {
-            alert("No content to export!");
-            return;
-        }
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(12);
-
-        // Split text into lines to avoid text overflow
-        const marginLeft = 20;
-        const marginTop = 40;
-        const pageWidth = doc.internal.pageSize.width - marginLeft * 2; // Adjust width
-
-        const splitContent = doc.splitTextToSize(content, pageWidth);
-
-        // Add text to the PDF
-        doc.text(splitContent, marginLeft, marginTop);
-
-        // Save the document
-        doc.save("BPMN_Documentation.pdf");
-    };
-
-
-    const handleExport = async (format) => {
-        try {
-            const modeler = window.bpmnModeler; // Ensure the BPMN modeler instance is globally accessible
-            if (!modeler) {
-                console.error('BPMN Modeler is not available.');
-                return;
-            }
-
-            let content, mimeType, fileExtension;
-
-            switch (format) {
-                case 'bpmn':
-                case 'xml':
-                    // Export as BPMN or XML
-                    const { xml } = await modeler.saveXML({ format: true });
-                    content = xml;
-                    mimeType = 'application/xml';
-                    fileExtension = format;
-                    break;
-
-                case 'png':
-                    // Export as PNG
-                    const { svg } = await modeler.saveSVG({ format: true });
-                    const canvas = document.createElement('canvas');
-                    const img = new Image();
-                    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-
-                    // Convert SVG to PNG
-                    await new Promise((resolve) => {
-                        img.onload = () => {
-                            canvas.width = img.width;
-                            canvas.height = img.height;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0);
-                            canvas.toBlob((blob) => {
-                                content = blob;
-                                mimeType = 'image/png';
-                                fileExtension = 'png';
-                                resolve();
-                            }, 'image/png');
-                        };
-                    });
-                    break;
-
-                case 'jpg':
-                    // Export as JPG
-                    const { svg: svgForJpg } = await modeler.saveSVG({ format: true });
-                    const canvasForJpg = document.createElement('canvas');
-                    const imgForJpg = new Image();
-                    imgForJpg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgForJpg);
-
-                    // Convert SVG to JPG
-                    await new Promise((resolve) => {
-                        imgForJpg.onload = () => {
-                            canvasForJpg.width = imgForJpg.width;
-                            canvasForJpg.height = imgForJpg.height;
-                            const ctx = canvasForJpg.getContext('2d');
-                            ctx.fillStyle = '#ffffff'; // Set white background for JPG
-                            ctx.fillRect(0, 0, canvasForJpg.width, canvasForJpg.height);
-                            ctx.drawImage(imgForJpg, 0, 0);
-                            canvasForJpg.toBlob((blob) => {
-                                content = blob;
-                                mimeType = 'image/jpeg';
-                                fileExtension = 'jpg';
-                                resolve();
-                            }, 'image/jpeg');
-                        };
-                    });
-                    break;
-
-                default:
-                    console.error('Unsupported export format:', format);
+    
+    
+        const [documentation, setDocumentation] = useState('');
+        const [openDoc, setOpenDoc] = useState(false);
+        const [isLoadingDoc, setIsLoadingDoc] = useState(false);    
+        const [isEditing, setIsEditing] = useState(false);
+        const [editedText, setEditedText] = useState('');
+    
+        const handleGenerateDocumentation = async () => {
+    
+          setOpenDoc(true);  // Show modal immediately when button is clicked
+          setIsLoadingDoc(true); // Show loading state
+      
+            try {
+                // Send request to documentation API
+                const url = config.apiBaseUrl + '/bpmn/generate-bpmn-documentation/';
+                const response = await axios.post(
+                  url,
+                  { encrypted_id: encryptedID }
+                    
+                );
+    
+                if (response.status === 200) {
+                    setDocumentation(response.data.reply);
+                    setEditedText(response.data.reply);
+                    setOpenDoc(true);
+                    //console.log('Documentation generated:', response.data.reply);
+                } else {
+                    console.error('Failed to generate documentation:', response.data.error);
+                }
+            } catch (error) {
+                console.error('Error generating documentation:', error);
+            }finally {
+              setIsLoadingDoc(false); // Remove loading state when response arrives
+          }
+        };
+    
+        const handleCopy = () => {
+            navigator.clipboard.writeText(editedText);
+        };
+    
+        const handleDocumentationExport = () => {
+            const blob = new Blob([editedText], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = 'BPMN_Documentation.txt';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+    
+        const handleExport = async (format) => {
+            try {
+                const modeler = window.bpmnModeler; // Ensure the BPMN modeler instance is globally accessible
+                if (!modeler) {
+                    console.error('BPMN Modeler is not available.');
                     return;
+                }
+        
+                let content, mimeType, fileExtension;
+        
+                switch (format) {
+                    case 'bpmn':
+                    case 'xml':
+                        // Export as BPMN or XML
+                        const { xml } = await modeler.saveXML({ format: true });
+                        content = xml;
+                        mimeType = 'application/xml';
+                        fileExtension = format;
+                        break;
+        
+                    case 'png':
+                        // Export as PNG
+                        const { svg } = await modeler.saveSVG({ format: true });
+                        const canvas = document.createElement('canvas');
+                        const img = new Image();
+                        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        
+                        // Convert SVG to PNG
+                        await new Promise((resolve) => {
+                            img.onload = () => {
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+                                canvas.toBlob((blob) => {
+                                    content = blob;
+                                    mimeType = 'image/png';
+                                    fileExtension = 'png';
+                                    resolve();
+                                }, 'image/png');
+                            };
+                        });
+                        break;
+        
+                    case 'jpg':
+                        // Export as JPG
+                        const { svg: svgForJpg } = await modeler.saveSVG({ format: true });
+                        const canvasForJpg = document.createElement('canvas');
+                        const imgForJpg = new Image();
+                        imgForJpg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgForJpg);
+        
+                        // Convert SVG to JPG
+                        await new Promise((resolve) => {
+                            imgForJpg.onload = () => {
+                                canvasForJpg.width = imgForJpg.width;
+                                canvasForJpg.height = imgForJpg.height;
+                                const ctx = canvasForJpg.getContext('2d');
+                                ctx.fillStyle = '#ffffff'; // Set white background for JPG
+                                ctx.fillRect(0, 0, canvasForJpg.width, canvasForJpg.height);
+                                ctx.drawImage(imgForJpg, 0, 0);
+                                canvasForJpg.toBlob((blob) => {
+                                    content = blob;
+                                    mimeType = 'image/jpeg';
+                                    fileExtension = 'jpg';
+                                    resolve();
+                                }, 'image/jpeg');
+                            };
+                        });
+                        break;
+        
+                    default:
+                        console.error('Unsupported export format:', format);
+                        return;
+                }
+        
+                // Trigger download
+                const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `diagram.${fileExtension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+        
+                console.log(`Exported as ${fileExtension}`);
+            } catch (error) {
+                console.error('Failed to export diagram:', error);
             }
-
-            // Trigger download
-            const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `diagram.${fileExtension}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            console.log(`Exported as ${fileExtension}`);
-        } catch (error) {
-            console.error('Failed to export diagram:', error);
-        }
-    };
+        };
 
     const handleMenuClick = (event) => {
         setAnchorEl(event.currentTarget);
@@ -275,9 +236,9 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
     const handleDeleteDiagram = async () => {
         setAnchorEl(null);
         setOpenConfirmDialog(true);
-    };
-
-    const handleConfirmDeleteDiagram = async () => {
+      };
+    
+      const handleConfirmDeleteDiagram = async () => {
         setOpenConfirmDialog(false);
         try {
             const token = await refreshAccessToken();
@@ -305,7 +266,7 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
             setNotifSeverity('error');
             setNotifOpen(true);
         }
-    };
+      };
 
 
     const [notifOpen, setNotifOpen] = useState(false);
@@ -460,12 +421,6 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
                             <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Timeline</Typography>
                         </div>
 
-                        
-
-                    </div>
-                    {/* Right Section */}
-
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
                         {/* Smart Documention Generator */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 8 }}>
                             <IconButton size="small" aria-label="Documentation" onClick={handleGenerateDocumentation}>
@@ -473,149 +428,73 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
                             </IconButton>
                             <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Documentation</Typography>
 
-                            <Modal open={openDoc} onClose={() => setOpenDoc(false)}>
-                                <div style={{
-                                    backgroundColor: 'white',
-                                    padding: '20px',
-                                    margin: '5% auto',
-                                    width: '60%',
-                                    maxHeight: '80vh',
-                                    borderRadius: '8px',
-                                    fontFamily: 'Arial, sans-serif',
-                                    fontSize: '12px',
-                                    color: 'black',
-                                    overflowY: 'auto',
-                                    // Scrollbar Styling
-                                    scrollbarWidth: 'thin',  // For Firefox
-                                    scrollbarColor: '#b0b0b0 #f1f1f1', // Thumb & Track color           
-                                }}>
-                                    <div
-                                        style={{
-                                            marginTop: "5px",
-                                            marginBottom: "3px",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            width: "100%",
-
-                                        }}
-                                    >
-                                        <h1 style={{ margin: 0 }}>Smart BPMN Workflow Documentation</h1>
-                                        <div>
-                                            <IconButton onClick={handleCopy}><FileCopy /></IconButton>
-                                            <IconButton onClick={handleDocumentationExport}><GetApp /></IconButton>
+                             <Modal open={openDoc} onClose={() => setOpenDoc(false)}>
+                                        <div style={{ 
+                                            backgroundColor: 'white', 
+                                            padding: '20px', 
+                                            margin: '5% auto', 
+                                            width: '60%', 
+                                            maxHeight: '80vh', 
+                                            borderRadius: '8px',
+                                            fontFamily: 'Arial, sans-serif',
+                                            fontSize: '12px',
+                                            color: 'black', 
+                                            overflowY: 'auto'             
+                                        }}>
+                                            <div
+                                              style={{
+                                                marginTop: "5px",
+                                                marginBottom: "3px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                width: "100%",
+                                              }}
+                                            >
+                                                <h1 style={{ margin: 0 }}>Smart BPMN Workflow Documentation</h1>
+                                                <div>
+                                                    <IconButton onClick={handleCopy}><FileCopy /></IconButton>
+                                                    <IconButton onClick={handleDocumentationExport}><GetApp /></IconButton>
+                                                </div>
+                                            </div>   
+                            
+                                            {/* Display Loading Text or Documentation */}
+                                            {isLoadingDoc ? (
+                                                <div style={{ textAlign: 'center', fontSize: '18px', fontWeight: 'bold', marginTop: '20px', marginBottom: '20px' }}>
+                                                    <p>⏳Documentation Generating...</p>
+                                                </div>
+                                            ) : (
+                                                <TextareaAutosize
+                                                    value={isEditing ? editedText : documentation}
+                                                    onChange={(e) => setEditedText(e.target.value)}
+                                                    style={{
+                                                        width: '100%',
+                                                        height: '300px',
+                                                        padding: '10px',
+                                                        fontFamily: 'Arial, sans-serif',
+                                                        fontSize: '20px',
+                                                        color: 'black',
+                                                        resize: 'none',
+                                                        overflowY: 'auto',
+                                                        border: '1px solid #ddd',
+                                                        borderRadius: '5px'
+                                                    }}
+                                                    disabled={!isEditing}
+                                                />  
+                                            )}
                                         </div>
-                                    </div>
-
-                                    {/* Display Loading Text or Documentation */}
-                                    {isLoadingDoc ? (
-                                        <div style={{ textAlign: 'center', fontSize: '18px', fontWeight: 'bold', marginTop: '20px', marginBottom: '20px' }}>
-                                            <p>⏳Documentation Generating...</p>
-                                        </div>
-                                    ) : (
-                                        <TextareaAutosize
-                                            value={isEditing ? editedText : documentation}
-                                            onChange={(e) => setEditedText(e.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                height: '300px',
-                                                padding: '10px',
-                                                fontFamily: 'Arial, sans-serif',
-                                                fontSize: '20px',
-                                                color: 'black',
-                                                resize: 'none',
-                                                overflowY: 'auto',
-                                                border: '1px solid #ddd',
-                                                borderRadius: '5px',
-                                                // Scrollbar Styling for Chrome & Edge
-                                                WebkitOverflowScrolling: 'touch',
-                                                scrollbarWidth: 'thin',  // For Firefox
-                                            }}
-                                            disabled={!isEditing}
-                                        />
-                                    )}
-                                </div>
-                            </Modal>
+                                    </Modal>
                         </div>
-                        {permissions === 'editor' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }}>
-                            <IconButton
-                                size="small"
-                                onClick={() => setOptidialog(true)}
-                            >
-                                <Build fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Optimize</Typography>
-                        </div>
-                        ) : ''}
-                        
-                        <div>
-                            <Dialog
-                                open={Boolean(optidialog)}
-                                onClose={() => setOptidialog(null)}
-                                maxWidth="sm"
-                                fullWidth
-                            >
-                                <DialogTitle>Process Optimization</DialogTitle>
-                                <DialogContent>
-                                    <DialogContentText>
-                                        Would you like to optimize your BPMN process? This will analyze your workflow and suggest improvements.
-                                    </DialogContentText>
-                                    <Alert severity="info" sx={{ mt: 2 }}>
-                                        This feature will analyze your process for:
-                                        <ul>
-                                            <li>Potential bottlenecks</li>
-                                            <li>Parallel processing opportunities</li>
-                                            <li>Redundant steps</li>
-                                        </ul>
-                                    </Alert>
-                                    <Alert severity="warning" sx={{ mt: 2 }}>
-                                        Please note that this feature is experimental and may not work as expected.
-                                    </Alert>
-                                </DialogContent>
-                                <DialogActions>
-                                    <Button onClick={() => setOptidialog(null)}>Cancel</Button>
-                                    <Button
-                                        variant="contained"
-                                        onClick={async () => {
-                                            setIsOptimizing(true);
-                                            setOptidialog(null);
-                                            try {
-                                                //  optimization endpoint calling
-                                                const url = config.apiBaseUrl + "/bpmn/optimize/" + encryptedID;
-                                                const token = await refreshAccessToken();
-                                                const response = await axios.post(url, {}, {
-                                                    headers: {
-                                                        Authorization: `Bearer ${token}`,
-                                                    },
-                                                });
-                                                // console.log(response.data);
-                                                onOptimizedXml(response.data.xml_data)
-                                                // console.log(optimizedXml);
 
-                                            } catch (error) {
-                                                console.error(error);
-                                            } finally {
-                                                setIsOptimizing(false);
-                                                setOptidialog(null);
-                                            }
-                                        }}
-                                    >
-                                        Optimize Process
-                                    </Button>
-                                </DialogActions>
-                            </Dialog>
-
-                            {/* Loading Backdrop */}
-                            <Backdrop open={isOptimizing} style={{ zIndex: 1300, color: '#fff' }}>
-                                <CircularProgress color="inherit" />
-                            </Backdrop>
-                        </div>
+                    </div>
+                    {/* Right Section */}
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
                         {permissions ?
                             <ShareDiagram permissions={permissions} />
                             :
                             ''
                         }
+
 
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }} onMouseLeave={() => setAnchorElExport(null)}>
                             <IconButton
@@ -704,9 +583,9 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
                             handleDeleteDiagram();
                         }} sx={{ fontSize: '0.8rem' }}>Delete</MenuItem>
                         <Divider />
-                        <MenuItem onClick={() => {
+                        <MenuItem onClick={() =>{
                             handleMenuClose;
-                            navigate('/bpmn-versions/' + encryptedID);
+                            navigate('/bpmn-versions/'+encryptedID);
                         }} sx={{ fontSize: '0.8rem' }}>Version History</MenuItem>
                         <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Details</MenuItem>
                         <Divider />

@@ -23,8 +23,8 @@ const ProfilePage = () => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        const url = config.apiBaseUrl + 'authentication/dj-rest-auth/user/';
         const accessToken = localStorage.getItem('access'); // Fetch access token
-        const url = config.apiBaseUrl + '/authentication/dj-rest-auth/user/';
         const response = await axios.get(url, {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -88,9 +88,8 @@ const ProfilePage = () => {
         //company: profileData.company,
       };
 
-      const url = config.apiBaseUrl + '/authentication/dj-rest-auth/user/';
       await axios.put(
-        url,
+        'http://127.0.0.1:8000/authentication/dj-rest-auth/user/',
         updatedData,
         {
           headers: {

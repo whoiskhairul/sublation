@@ -1,6 +1,6 @@
-// src/BpmnModeler.js
+// src/BpmnViewer.js
 import React, { useEffect, useRef } from "react";
-import BpmnModeler from "bpmn-js/lib/Modeler";
+import BpmnViewer from "bpmn-js/lib/NavigatedViewer";
 import axios from "axios"; // Import Axios
 import "bpmn-js/dist/assets/diagram-js.css";
 import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
@@ -38,7 +38,7 @@ const BpmnViewerComponent = ({ diagramXml }) => {
     const modelerRef = useRef(null);
 
     useEffect(() => {
-        modelerRef.current = new BpmnModeler({
+        modelerRef.current = new BpmnViewer({
             container: containerRef.current,
             width: "100%",
             height: "100%",

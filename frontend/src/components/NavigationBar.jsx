@@ -109,7 +109,7 @@ const NavigationBar = () => {
           <div className="dropdown-menu"onMouseLeave={handleMouseLeaveForDropdown}>
             <div className="dropdown-header">
               <span className="dropdown-avatar">👤</span>
-              <div className="dropdown-info" onClick={() => navigate('/profile')}>
+              <div className="dropdown-info" onClick={() => navigate('/homepage')}>
                 <p className="dropdown-name">{user?.username || 'Guest'}</p>
                 <p className="dropdown-email">{user?.email || 'example@gmail.com'}</p>
               </div>
@@ -137,21 +137,16 @@ const NavigationBar = () => {
       >
         <div className="sidebar-header">
           <img src={logo} alt="Profile" className="profile-image" />
-          <div className="sidebar_user_info" onClick={() => navigate('/profile')}>
+          <div className="sidebar_user_info" onClick={() => navigate('/homepage')}>
             <p className="profile-name">{user?.username || 'Guest'}</p>
             <p className="profile-email">{user?.email || 'example@gmail.com'}</p>
           </div>
         </div>
         <ul className="sidebar-options">
           <li onClick={() => navigate('/homepage')}>Home</li>
-          <li onClick={() => navigate('/studio')}>Studio</li>
-          <li onClick={() => navigate('/image-to-bpmn')}>Image To BPMN</li>
-          <li onClick={() => navigate('/studio')}>Workspace</li>
-          <li onClick={() => navigate('/studio')}>Projects</li>
-          <li onClick={() => navigate('/studio')}>Tutorial</li>
-          <li onClick={() => navigate('/studio')}>Inbox</li>
-          <li onClick={() => navigate('/tutorial')}>Settings</li>
-          <li onClick={() => navigate('/settings')}>Help</li>
+          <li onClick={() => navigate('/image-to-bpmn')}>Image To BPMN</li>          
+          <li onClick={() => navigate('/homepage/templates/')}>Templates</li>
+          <li onClick={() => navigate('/faq')}>FAQ</li>
           <li onClick={handleLogout}>Log out</li>
         </ul>
       </div>

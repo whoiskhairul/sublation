@@ -14,10 +14,20 @@ import { Navigate } from 'react-router-dom';
 import SignUpPage from './components/SignUpPage';
 import BpmnProfile from './components/BpmnProfile';
 import Studio2 from './components/BpmnError/Studio2';
-import Studio3 from './components/practice/Studio3';
 import ImageToBPMN from './components/ImageToBPMN';
 import BpmnVersions from "./components/BpmnVersions.jsx";
 import BpmnTemplate from './components/BpmnTemplate';
+import BpmnFolder from './components/BpmnFolder.jsx';
+
+import Contact from './components/Contact';
+//import TemplatesPage from './components/TemplatesPage';// should refine
+// import UserProfileSettings from './components/UserProfileSetting';
+import AboutPage from "./components/AboutPage";
+import PricingFeatures from "./components/pricingFeatures";
+import FAQPage from "./components/faqPage";
+import UserProfileSettings from "./components/UserProfileSetting";
+import { Component } from 'react';
+
 function App() {
   const { user } = useUser();
   return (
@@ -81,6 +91,13 @@ function App() {
         }
         />
 
+        <Route path="/homepage/folder/:encryptedFolderID" element={
+          <ProtectedRoute>
+            <BpmnFolder />
+          </ProtectedRoute>
+        }
+        />
+
         {/* Navbar route */}
         <Route
           path="/navigationBar"
@@ -132,15 +149,6 @@ function App() {
                     <BpmnVersions />
                 }
             />
-
-        <Route 
-          path="/practice/:encryptedID" 
-          element={
-            <ProtectedRoute>
-              <Studio3 />
-            </ProtectedRoute>
-          }
-        />
         <Route
           path="/bpmn"
           element={
@@ -154,7 +162,52 @@ function App() {
             )
           }
         />
+
+<Route
+        path="/about"
+        element={
+      
+            <AboutPage />
+        }
+
+        />
+  {/* <Route
+        path="/templates"
+        element={
+          
+            <TemplatesPage />
+         
+        } 
+        /> */}
+      <Route
+        path="/usersetting"
+        element={
+          
+            < UserProfileSettings />
+         
+        } />
+        
+        <Route
+        path="/faq"
+        element={
+          
+            < FAQPage />
+         
+        } 
+        />
+         <Route
+        path="/pricing"
+        element={
+          
+            < PricingFeatures />
+         
+        } 
+        />
+
       </Routes>
+
+  
+
     </Router>
 
   );

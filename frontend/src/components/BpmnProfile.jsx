@@ -5,48 +5,23 @@ import axios from 'axios';
 import { refreshAccessToken } from './auth';
 import NotificationSnackBar from './NotificationSnackbar';
 
-import {
-  Typography,
-  Card,
-  CardHeader,
-  CardContent,
-  CardMedia,
-  CardActions,
-  IconButton,
-  Avatar,
-  Box,
-  Container,
-  Stack,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  DialogContentText,
-  Button,
-  TextField,
-  Tooltip,
-  Tabs,
-  Tab,
-} from '@mui/material';
-import { red, green } from '@mui/material/colors';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import ShareIcon from '@mui/icons-material/Share';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import DriveFileRenameOutlineOutlinedIcon from '@mui/icons-material/DriveFileRenameOutlineOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-
-import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
-import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Delete } from '@mui/icons-material';
-import ViewModuleIcon from '@mui/icons-material/ViewModule';
-import ViewListIcon from '@mui/icons-material/ViewList';
 import config from '../config';
+
+import {
+  Typography, Card, CardHeader, CardContent, CardMedia, CardActions, IconButton, Avatar, Box,
+  Container, Stack, Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText,
+  Button, TextField, Tooltip, Tabs, Tab,
+} from '@mui/material';
+
+import {
+  Delete, Favorite, Share, MoreVert, DriveFileRenameOutlineOutlined,
+  InfoOutlined, Folder, CreateNewFolder, ArrowBackIos, ArrowForwardIos,
+  ViewModule, ViewList, DriveFileMove,
+} from '@mui/icons-material';
+
+import { red, green } from '@mui/material/colors';
+
 
 const BpmnProfile = () => {
   const navigate = useNavigate();
@@ -76,7 +51,7 @@ const BpmnProfile = () => {
   }
   const handleOptimization = async () => {
     try {
-      navigate(pathname + '/optimize-bpmn/')
+      // navigate(pathname + '/optimize-bpmn/')
 
     } catch (err) {
       console.log(err);
@@ -84,7 +59,7 @@ const BpmnProfile = () => {
   }
   const handleErrorDetection = async () => {
     try {
-      navigate(pathname + '/error-detection/')
+      // navigate(pathname + '/error-detection/')
 
     } catch (err) {
       console.log(err);
@@ -92,7 +67,7 @@ const BpmnProfile = () => {
   }
   const handleSimulation = async () => {
     try {
-      navigate(pathname + '/simulation/')
+      // navigate(pathname + '/simulation/')
 
     } catch (err) {
       console.log(err);
@@ -104,14 +79,14 @@ const BpmnProfile = () => {
 
     } catch (err) {
       console.log(err);
+    }
   }
-}
   const options = [
     { name: 'Create New BPMN', color: '#fff', image: '/createbpmn.svg', path: () => handletextToBpmn(), tooltip: 'Create BPMN by texting with interective chatbot' },
     { name: 'Image to BPMN', color: '#E0E7FF', image: '/image.jpg', path: () => handleImageToBPMN() },
     { name: 'Template Galary', color: green[400], image: '/template.jpg', path: () => handleTemplate() },
-    { name: 'Error Detection', color: red[400], image: '/error.jpg', path: () => handleErrorDetection() },
     { name: 'Process optimization', color: '#E0E7FF', image: '/optimization.jpg', path: () => handleSimulation() },
+    { name: 'Error Detection', color: red[400], image: '/error.jpg', path: () => handleErrorDetection() },
     { name: 'Smart Simulation', color: '#E0E7FF', image: '/simulation.jpg', path: () => handleSimulation() },
     // { name: 'Smart Simulation', color: '#E0E7FF', image: '/Untitled.png', path: () => handleSimulation() },
     // { name: 'Smart Simulation', color: '#E0E7FF', image: '/Untitled.png', path: () => handleSimulation() },
@@ -119,6 +94,7 @@ const BpmnProfile = () => {
   const [diagrams, setDiagrams] = useState([]);
   const [sharedDiagrams, setSharedDiagrams] = useState([]);
   const [activeTab, setActiveTab] = useState(0);
+  const [folders, setFolders] = useState([]);
 
   const getAllDiagrams = async () => {
     try {
@@ -141,6 +117,26 @@ const BpmnProfile = () => {
     getAllDiagrams();
   }, []);
 
+  const getFolders = async () => {
+    try {
+      const token = await refreshAccessToken();
+      const url = config.apiBaseUrl + '/bpmn/get-folders/';
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setFolders(response.data.folders);
+
+    } catch (err) {
+      console.log(err);
+    }
+  }
+
+  useEffect(() => {
+    getFolders();
+  }, []);
+
   const scrollRef = React.useRef(null);
 
   const scrollLeft = () => {
@@ -151,6 +147,7 @@ const BpmnProfile = () => {
     scrollRef.current.scrollBy({ left: 200, behavior: 'smooth' });
   };
   const [encryptedDiagramID, setEncryptedDiagramID] = useState([]);
+  const [selectedFolder, setSelectedFolder] = useState(null);
 
   const [anchorEl, setAnchorEl] = React.useState(null);
   const open = Boolean(anchorEl);
@@ -220,12 +217,51 @@ const BpmnProfile = () => {
     }
   };
 
+  const [openMoveDialog, setOpenMoveDialog] = useState(false);
+  const handleMoveDiagram = async () => {
+    setAnchorEl(null);
+    setOpenMoveDialog(true);
+  };
+
+  const moveDiagramtoFolder = async () => {
+    try {
+      const token = await refreshAccessToken();
+      const url = config.apiBaseUrl + '/bpmn/move-diagram-to-folder/';
+      const response = await axios.put(url,
+        {
+          encrypted_folder_id: selectedFolder,
+          encrypted_id: encryptedDiagramID
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setSelectedFolder(null);
+      if (response.status === 200) {
+        const reply = response.data.reply;
+        setNotifMessage(reply);
+        setNotifSeverity('success');
+        setOpenSnack(true);
+        getAllDiagrams();
+      }
+    } catch (error) {
+      const reply = error.response.data.reply;
+      setNotifMessage(reply);
+      setNotifSeverity('error');
+      setOpenSnack(true);
+    }
+  };
+  
+
   const [newName, setNewName] = useState('');
 
   const handleRenameDiagram = () => {
     setAnchorEl(null);
     setOpenRenameDialog(true);
   }
+
   const handleSubmitRename = async (event) => {
     const token = await refreshAccessToken();
     const url = config.apiBaseUrl + '/bpmn/update-diagram/' + encryptedDiagramID;
@@ -252,6 +288,41 @@ const BpmnProfile = () => {
     }
   }
 
+
+  const handleCreateNewFolder = async () => {
+    // Add folder creation logic here
+    try {
+      const token = await refreshAccessToken();
+      const url = config.apiBaseUrl + '/bpmn/create-folder/';
+      const response = await axios.post(url,
+        {
+          name: newFolderName
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      if (response.status === 201) {
+        setFolders([...folders, response.data.folder]);
+        const reply = response.data.reply;
+        setNotifMessage(reply);
+        setNotifSeverity('success');
+        setOpenSnack(true);
+        getAllDiagrams();
+      }
+    } catch (error) { // Handle error
+      const reply = error.response.data.reply;
+      setNotifMessage(reply);
+      setNotifSeverity('error');
+      setOpenSnack(true);
+    }
+    setOpenNewFolderDialog(false);
+    setNewFolderName('');
+  };
+
+
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
@@ -259,6 +330,8 @@ const BpmnProfile = () => {
   const [viewMode, setViewMode] = useState('card'); // 'card' or 'list'
   const [sortOption, setSortOption] = useState('date'); // 'name' or 'date'
   const [filterText, setFilterText] = useState('');
+  const [openNewFolderDialog, setOpenNewFolderDialog] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
@@ -298,7 +371,7 @@ const BpmnProfile = () => {
             onClick={scrollLeft}
             sx={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 1 }}
           >
-            <ArrowBackIosIcon />
+            <ArrowBackIos />
           </IconButton>
 
           <Box
@@ -340,6 +413,11 @@ const BpmnProfile = () => {
                     opacity: 0,
                     animation: 'fadeIn 0.5s ease forwards',
                     animationDelay: `${index * 0.2}s`,
+                    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                    '&:hover': {
+                      transform: 'translateY(-8px) scale(1.02)',
+                      boxShadow: '0 12px 24px rgba(0, 0, 0, 0.15)',
+                    },
                     '@keyframes fadeIn': {
                       '0%': {
                         opacity: 0,
@@ -375,7 +453,7 @@ const BpmnProfile = () => {
             onClick={scrollRight}
             sx={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 1 }}
           >
-            <ArrowForwardIosIcon />
+            <ArrowForwardIos />
           </IconButton>
         </Container>
       </div>
@@ -387,6 +465,12 @@ const BpmnProfile = () => {
             <Tab label="Shared with Me" />
           </Tabs>
           <Stack direction="row" spacing={2} alignItems="center">
+            <IconButton onClick={() => setOpenNewFolderDialog(true)}>
+              <Tooltip title="Create a new Project">
+                <CreateNewFolder />
+              </Tooltip>
+            </IconButton>
+
             <TextField
               label="Search"
               variant="outlined"
@@ -412,18 +496,72 @@ const BpmnProfile = () => {
             </TextField>
             <IconButton onClick={() => handleViewModeChange('card')}>
               <Tooltip title="Grid View">
-                <ViewModuleIcon />
+                <ViewModule />
               </Tooltip>
             </IconButton>
             <IconButton onClick={() => handleViewModeChange('list')}>
               <Tooltip title="List View">
-                <ViewListIcon />
+                <ViewList />
               </Tooltip>
             </IconButton>
           </Stack>
         </Stack>
+
+        {folders.length > 0 && (
+
+          <Stack direction="row" spacing={2} style={{ flexWrap: 'wrap', marginTop: '20px' }}>
+            <Typography sx={{ paddingY: '10px' }} variant="h6" gutterBottom>
+              My Projects
+            </Typography>
+          </Stack>
+        )}
+        <Container>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 2, mb: 1 }}>
+            {folders.map((folder) => (
+              <Tooltip key={folder.id} title={folder.name}>
+                <Card
+                  sx={{
+                    display: 'flex',
+                    backgroundColor: '#E0E0E0',
+                    alignItems: 'center',
+                    pl: 1,
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                      transform: 'translateY(-2px)',
+                      transition: 'transform 0.2s ease-in-out',
+                    },
+                  }}
+                  onClick={() => navigate(`/homepage/folder/${folder.encrypted_folder_id}`)}
+                >
+                  <Folder sx={{ mr: 2, color: '#616161' }} />
+
+                  <Box sx={{ flexGrow: 1 }}>
+                    <Typography variant="caption" noWrap>
+                      {folder.name.length > 15 ? `${folder.name.slice(0, 15)}...` : folder.name}
+                    </Typography>
+                  </Box>
+
+                  <IconButton
+                    aria-label="settings"
+                    onClick={(event) => {
+                      event.stopPropagation(); // Add this line to stop event propagation
+                      
+
+                    }}>
+                    <MoreVert />
+                  </IconButton>
+                </Card></Tooltip>
+            ))}
+          </Box>
+        </Container>
+
+
+
+
         <Stack direction="row" spacing={2} style={{ flexWrap: 'wrap' }}>
-          <Typography sx={{ paddingBottom: '10px' }} variant="h6" gutterBottom>
+          <Typography sx={{ paddingY: '10px' }} variant="h6" gutterBottom>
             {activeTab === 0 ? 'My Diagrams' : 'Shared Diagrams'}
           </Typography>
           <Stack
@@ -444,6 +582,11 @@ const BpmnProfile = () => {
                   opacity: 0,
                   animation: 'fadeIn 0.5s ease forwards',
                   animationDelay: `${index * 0.1}s`,
+                  transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                  '&:hover': {
+                    transform: 'scale(1.05)',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                  },
                   '@keyframes fadeIn': {
                     '0%': {
                       opacity: 0,
@@ -463,11 +606,11 @@ const BpmnProfile = () => {
                     }
                     action={
                       <IconButton aria-label="settings" onClick={(event) => { handleMenuClick(event); setEncryptedDiagramID(diagram.encrypted_id); }}>
-                        <MoreVertIcon />
+                        <MoreVert />
                       </IconButton>
                     }
                     title={diagram.name.length > 20 ? `${diagram.name.slice(0, 20)}...` : diagram.name}
-                    subheader={diagram.id}
+                    // subheader={diagram.id}
                   />
                   <CardMedia
                     onClick={() => navigate(`/homepage/bpmn/${diagram.encrypted_id}`)}
@@ -486,40 +629,52 @@ const BpmnProfile = () => {
                       {`Last edited: ${diagram.updated_at}`}
                     </Typography>
                   </CardContent>
-                  <CardActions disableSpacing>
-                    <IconButton aria-label="add to favorites">
-                      <FavoriteIcon />
-                    </IconButton>
-                    <IconButton aria-label="share">
-                      <ShareIcon />
-                    </IconButton>
+                  <CardActions disableSpacing sx={{ justifyContent: 'space-between' }}>
+                    <Box>
+                      <IconButton aria-label="add to favorites">
+                        <Favorite />
+                      </IconButton>
+                      <IconButton aria-label="share">
+                        <Share />
+                      </IconButton>
+                    </Box>
+                    {/* <IconButton aria-label="settings" onClick={(event) => { handleMenuClick(event); setEncryptedDiagramID(diagram.encrypted_id); }}>
+                      <MoreVert />
+                    </IconButton> */}
                   </CardActions>
                 </Card>
               ) : (
-                <Box key={index} sx={{
-                  width: '100%',
-                  padding: 2,
-                  borderBottom: '1px solid #ddd',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  opacity: 0,
-                  animation: 'fadeIn 0.5s ease forwards',
-                  animationDelay: `${index * 0.1}s`,
-                  '@keyframes fadeIn': {
-                    '0%': {
-                      opacity: 0,
-                      transform: 'translateY(20px)'
+                <Box onClick={() => navigate(`/homepage/bpmn/${diagram.encrypted_id}`)}
+                  key={index} sx={{
+                    width: '100%',
+                    padding: 2,
+                    borderBottom: '1px solid #ddd',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    opacity: 0,
+                    animation: 'fadeIn 0.5s ease forwards',
+                    animationDelay: `${index * 0.1}s`,
+                    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                    '&:hover': {
+                      transform: 'scale(1.05)',
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
                     },
-                    '100%': {
-                      opacity: 1,
-                      transform: 'translateY(0)'
+                    '@keyframes fadeIn': {
+                      '0%': {
+                        opacity: 0,
+                        transform: 'translateY(20px)'
+                      },
+                      '100%': {
+                        opacity: 1,
+                        transform: 'translateY(0)'
+                      }
                     }
-                  }
 
-                }}>
+
+                  }}>
                   <Tooltip title={diagram.name ? diagram.name : ''}>
-                    <Typography sx={{ cursor: 'pointer', width: '20%' }} variant="body1" onClick={() => navigate(`/homepage/bpmn/${diagram.encrypted_id}`)}>
+                    <Typography sx={{ cursor: 'pointer', width: '20%' }} variant="body1" >
                       {diagram.name.length > 30 ? `${diagram.name.slice(0, 30)}...` : diagram.name}
                     </Typography>
                   </Tooltip>
@@ -528,8 +683,8 @@ const BpmnProfile = () => {
                       {`${diagram.updated_at}`}
                     </Typography>
                   </Tooltip>
-                  <IconButton aria-label="settings" onClick={(event) => { handleMenuClick(event); setEncryptedDiagramID(diagram.encrypted_id); }}>
-                    <MoreVertIcon />
+                  <IconButton aria-label="settings" onClick={(event) => { event.stopPropagation(), handleMenuClick(event); setEncryptedDiagramID(diagram.encrypted_id); }}>
+                    <MoreVert />
                   </IconButton>
                 </Box>
               )
@@ -551,14 +706,17 @@ const BpmnProfile = () => {
           }}
         >
           <MenuItem onClick={handleRenameDiagram}>
-            <DriveFileRenameOutlineOutlinedIcon sx={{ marginRight: '1rem' }} /> <Typography variant="body2" fontSize="0.8rem">Rename</Typography>
+            <DriveFileRenameOutlineOutlined sx={{ marginRight: '1rem' }} /> <Typography variant="body2" fontSize="0.8rem">Rename</Typography>
           </MenuItem>
           <MenuItem onClick={handleDeleteDiagram}>
             <Delete sx={{ marginRight: '1rem' }} /><Typography variant="body2" fontSize="0.8rem">Delete</Typography>
 
           </MenuItem>
+          <MenuItem onClick={handleMoveDiagram}>
+            <DriveFileMove sx={{ marginRight: '1rem' }} /><Typography variant="body2" fontSize="0.8rem">Move to</Typography>
+          </MenuItem>
           <MenuItem onClick={handleMenuClose}>
-            <InfoOutlinedIcon sx={{ marginRight: '1rem' }} /><Typography variant="body2" fontSize="0.8rem">Details</Typography>
+            <InfoOutlined sx={{ marginRight: '1rem' }} /><Typography variant="body2" fontSize="0.8rem">Details</Typography>
           </MenuItem>
         </Menu>
 
@@ -609,6 +767,75 @@ const BpmnProfile = () => {
             </Button>
           </DialogActions>
         </Dialog>
+        {/* folder create dialog */}
+        <Dialog
+          open={openNewFolderDialog}
+          onClose={() => setOpenNewFolderDialog(false)}
+        >
+          <DialogTitle>Create New Folder</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Folder Name"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenNewFolderDialog(false)}>Cancel</Button>
+            <Button onClick={handleCreateNewFolder} color="primary">
+              Create
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={openMoveDialog}
+          onClose={() => setOpenMoveDialog(false)}
+        >
+          <DialogTitle>Move to a Folder</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Select a folder to move the diagram to:
+            </DialogContentText>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+              {folders.map((folder) => (
+                <Card
+                  key={folder.id}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    padding: 1,
+                    bgcolor: folder.encrypted_folder_id === selectedFolder ? '#bdbdbd' : 'background.paper',
+                    '&:hover': {
+                      bgcolor: '#bdbdbd',
+                    },
+                  }}
+                  onClick={() => setSelectedFolder(folder.encrypted_folder_id)}
+                >
+                  <Folder sx={{ mr: 2 }} />
+                  <Typography variant="body2">{folder.name}</Typography>
+                </Card>
+              ))}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenMoveDialog(false)}>Cancel</Button>
+            <Button onClick={() => {
+              // Add logic to move the diagram to the selected folder
+              moveDiagramtoFolder();
+              setOpenMoveDialog(false);
+            }} color="primary">
+              Move
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         <NotificationSnackBar
           open={openSnack}
           onClose={handleClose}

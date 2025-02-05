@@ -129,7 +129,7 @@ const BpmnTemplate = () => {
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <Grid container spacing={4}>
                         {templates.map((template) => (
-                            <Grid item key={template.id} xs={12} sm={6} md={4}>
+                            <Grid xs={12} sm={6} md={4} key={template.id}>
                                 <Card sx={{ maxWidth: 345, minWidth: 345 }} onClick={() => handleClickOpen(template)}>
                                     <CardActionArea>
                                         <CardMedia
