@@ -18,4 +18,15 @@ urlpatterns = [
     path('restore-diagram-version/',views.restore_diagram_version,name='restore_diagram_version'), #restore diagram version
     path('get-versions/<str:encrypted_id>', views.get_versions, name='get_versions'),
     path('templates/', views.templates, name='templates'), #get provided BPMN templates
+
+    path('create-folder/', views.create_folder, name='create_folder'), #create folder
+    path('move-diagram-to-folder/', views.move_to_folder, name='move_to_folder'), #move diagram to folder
+    path('get-folders/', views.get_folders, name='get_folders'), #get folder
+    path('get-folder-diagrams/<str:encrypted_folder_id>', views.get_folder_diagrams, name='get_folder_diagrams'), #get folder diagrams
+    path('delete-folder/<str:encrypted_folder_id>', views.delete_folder, name='delete_folder'), #delete folder
+    path('generate-bpmn-documentation/', views.generate_bpmn_documentation, name='generate_bpmn_documentation'), #generate BPMN documentation
+    
+    path('optimize/<str:encrypted_id>', views.optimize, name='optimize'), #get shared diagrams
+    path('generate-bpmn-documentation/', views.generate_bpmn_documentation, name='generate_bpmn_documentation'), #generate BPMN documentation
+    
 ]

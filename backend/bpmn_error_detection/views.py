@@ -1,8 +1,13 @@
 from django.http import JsonResponse
 from rest_framework.decorators import api_view
 import xml.etree.ElementTree as ET
+from django.conf import settings
 
 import uuid
+import openai  
+
+openai.api_key = settings.OPENAI_API_KEY
+client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 @api_view(['POST'])
@@ -244,3 +249,82 @@ def validate_bpmn(request):
             "message": f"Unexpected error: {str(e)}",
             "suggestion": "Check the BPMN XML and server logs for details."
         }]}, status=500)
+
+
+
+def generate_natural_description(element_data):
+    """
+    Convert BPMN elements into structured natural language descriptions.
+    """
+    description = []
+    
+    for elem in element_data:
+        if elem['type'] == "task":
+            description.append(f"The process includes a task: '{elem['name']}', which is responsible for {elem['description']}.")
+        elif elem['type'] == "startEvent":
+            description.append(f"The workflow begins with '{elem['name']}'.")
+        elif elem['type'] == "endEvent":
+            description.append(f"The process ends with '{elem['name']}'.")
+        elif elem['type'] == "exclusiveGateway":
+            description.append(f"A decision point occurs at '{elem['name']}', where the process splits based on conditions.")
+        elif elem['type'] == "parallelGateway":
+            description.append(f"The workflow branches into multiple paths at '{elem['name']}' and later synchronizes.")
+    
+    return " ".join(description)
+
+def enhance_with_ai(text):
+    """
+    Uses OpenAI GPT to refine BPMN workflow descriptions.
+    """
+    openai.api_key = OPENAI_API_KEY
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Refine this BPMN workflow description into a structured, professional, and easy-to-read explanation."},
+                {"role": "user", "content": text}
+            ]
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return text  # Fallback to the original text if API fails
+
+@api_view(['POST'])
+def generate_workflow_description(request):
+    """
+    API to generate natural language descriptions from BPMN XML
+    """
+    file = request.FILES.get('file')
+    if not file:
+        return JsonResponse({'error': 'No file provided'}, status=400)
+
+    try:
+        xml_content = file.read()
+        root = ET.ElementTree(ET.fromstring(xml_content)).getroot()
+
+        elements = []
+        for elem in root.iter():
+            tag_name = elem.tag.split("}")[-1]  # Extract tag without namespace
+            elem_id = elem.attrib.get('id', None)
+            elem_name = elem.attrib.get('name', f"Unnamed {tag_name}")
+
+            if tag_name in ["task", "startEvent", "endEvent", "exclusiveGateway", "parallelGateway"]:
+                elements.append({
+                    "id": elem_id,
+                    "name": elem_name,
+                    "type": tag_name,
+                    "description": elem.attrib.get('documentation', "No additional details available.")
+                })
+
+        # Generate basic workflow description
+        workflow_description = generate_natural_description(elements)
+
+        # Enhance with AI for better readability
+        enhanced_description = enhance_with_ai(workflow_description)
+
+        return JsonResponse({
+            'workflow_description': enhanced_description
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': f"Failed to process BPMN: {str(e)}"}, status=500)

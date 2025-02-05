@@ -28,8 +28,8 @@ from django.core.files.base import ContentFile
 import os
 
 from appointment_chatbot.models import PersonaInstruction # To set instruction for the OpenAI api
-from bpmn.models import BPMNDiagram, BPMNConversation, BPMNTemplate, DiagramShare, Message,DiagramVersion # to getthe model of the BPMN diagram
-from bpmn.serializers import BpmnDiagramSelializer, BpmnTemplateSerializer, DiagramShareSerializer, MessageSerializer,DiagramVersionSerializer # to serialize the BPMN diagram
+from bpmn.models import BPMNDiagram, BPMNConversation, BPMNTemplate, DiagramShare, Folder, Message,DiagramVersion # to getthe model of the BPMN diagram
+from bpmn.serializers import BpmnDiagramSelializer, BpmnTemplateSerializer, DiagramShareSerializer, FolderSerializer, MessageSerializer,DiagramVersionSerializer # to serialize the BPMN diagram
 
 from bpmn.utils import check_user_access, save_bpmn, write_bpmn_file,save_imported_diagram
 from scripts.encryption import encrypt_data, decrypt_data
@@ -152,12 +152,15 @@ def bpmn_chatbot(request):
 def create_bpmn_diagram(request):
     try:
         if request.data.get('templateXml') :
-            print("Creating BPMN diagram with template")
             template_xml =  request.data.get('templateXml', '')
             template_svg = request.data.get('templateSvg', '')
             save_bpmn(request.user, template_xml, template_svg)
+        elif request.data.get('encrypted_folder_id'):
+            encrypted_folder_id = request.data.get('encrypted_folder_id', '')
+            folder = Folder.objects.get(encrypted_folder_id=encrypted_folder_id)
+            print('folder:', folder)
+            save_bpmn(request.user, folder=folder)
         else:
-            print("Creating BPMN diagram without template")
             save_bpmn(request.user)
 
         latest_diagram = BPMNDiagram.objects.filter(user = request.user).latest('created_at')
@@ -181,6 +184,7 @@ def create_bpmn_diagram(request):
 def get_all_diagram(request):
     try:
         my_diagrams = BPMNDiagram.objects.filter(user = request.user).order_by('-updated_at')
+        my_diagrams = my_diagrams.exclude(folder__isnull=False)
         my_diagrams_serializer = BpmnDiagramSelializer(my_diagrams, many=True)
         my_diagrams = my_diagrams_serializer.data
 
@@ -415,8 +419,6 @@ def diagram_share(request, encrypted_id):
             )
 
 
-
-
 class BPMNDiagramUpdateView(generics.UpdateAPIView):
     queryset = BPMNDiagram.objects.all()
     serializer_class = BpmnDiagramSelializer
@@ -633,7 +635,6 @@ def restore_diagram_version(request):
      return Response({"reply": "Error in restoring version"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(['GET'])
 def get_versions(request, encrypted_id):
 
@@ -652,11 +653,6 @@ def get_versions(request, encrypted_id):
     return Response({"versions": versions}, status=status.HTTP_200_OK)
 
 
-
-
-
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def templates(request):
@@ -670,5 +666,266 @@ def templates(request):
         print("Error:", e)
         return Response(
             {"reply": "Sorry, I am not able to get the BPMN templates at the moment."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_folder(request):
+    try:
+        data = json.loads(request.body)
+        folder_name = data.get('name', '').strip()
+
+        # Validate folder name
+        if not folder_name:
+            return Response({
+                "success": False,
+                "reply": "Folder name is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if folder with same name exists
+        if Folder.objects.filter(name=folder_name, user=request.user).exists():
+            return Response({
+                "success": False,
+                "reply": "A folder with this name already exists."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create the folder
+        folder = Folder.objects.create(
+            name=folder_name,
+            user=request.user
+        )
+
+        return Response({
+            "success": True,
+            "reply": "Folder created successfully.",
+            "folder": {
+                "id": folder.id,
+                "name": folder.name,
+                'encrypted_folder_id': folder.encrypted_folder_id,
+                "created_at": folder.created_at.isoformat()
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    except json.JSONDecodeError:
+        return Response({
+            "success": False,
+            "reply": "Invalid JSON data."
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            "success": False,
+            "reply": f"An error occurred:"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_folders(request):
+    if request.method == "GET":
+        try:
+            folders = Folder.objects.filter(user=request.user)
+            serialized_folders = FolderSerializer(folders, many=True).data
+
+            return Response({
+                "success": True,
+                "folders": serialized_folders
+            }, status=200)
+
+        except Exception as e:
+            return Response({
+                "success": False,
+                "reply": str(e)
+            }, status=500)
+        
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_folder_diagrams(request, encrypted_folder_id):
+    if request.method == "GET":
+        try:
+            folder = Folder.objects.get(encrypted_folder_id=encrypted_folder_id)
+            diagrams = folder.diagrams.all()
+            serialized_diagrams = BpmnDiagramSelializer(diagrams, many=True).data
+
+            return Response({
+                "success": True,
+                "diagrams": serialized_diagrams,
+                "folderName": folder.name,
+            }, status=200)
+
+        except Folder.DoesNotExist:
+            return Response({
+                "success": False,
+                "reply": "Folder not found."
+            }, status=404)
+
+        except Exception as e:
+            print("Error:", e)
+            return Response({
+                "success": False,
+                "reply": str(e)
+            }, status=500)
+        
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def move_to_folder(request):
+    try:
+        data = json.loads(request.body)
+        encrypted_id = data.get('encrypted_id', '')
+        encrypted_folder_id = data.get('encrypted_folder_id', '')
+        print("Encrypted ID:", encrypted_id)
+        print("Encrypted Folder ID:", encrypted_folder_id)
+
+        if not encrypted_id:
+            return Response({
+                "success": False,
+                "reply": "Diagram ID is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not encrypted_folder_id:
+            return Response({
+                "success": False,
+                "reply": "Folder ID is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if encrypted_folder_id == 'Homepage':
+            diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
+            diagram.folder = None
+            diagram.save()
+            reply = "Diagram moved to Homepage successfully."
+        else:
+            diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
+            folder = Folder.objects.get(encrypted_folder_id=encrypted_folder_id)
+
+            diagram.folder = folder
+            diagram.save()
+            reply = f"Diagram moved to folder {folder.name} successfully."
+
+        return Response({
+            "success": True,
+            "reply": reply,
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print("Error:", e)
+        return Response({
+            "success": False,
+            "reply": f"An error occurred: {str(e)}"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_folder(request, encrypted_folder_id):
+    try:
+        folder = Folder.objects.get(encrypted_folder_id=encrypted_folder_id, user=request.user)
+        folder.delete()
+        return Response({
+            "success": True,
+            "reply": "Folder deleted successfully."
+        }, status=status.HTTP_200_OK)
+    except Folder.DoesNotExist:
+        return Response({
+            "success": False,
+            "reply": "Folder not found."
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            "success": False,
+            "reply": f"An error occurred: {str(e)}"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@api_view(['POST'])
+def generate_bpmn_documentation(request):
+    """
+    Handle POST request:
+    1. Fetch BPMN XML from the database.
+    2. Send a request to OpenAI to generate structured documentation.
+    3. Return the generated documentation.
+    """
+    #print(request)
+    try:
+        # Extract BPMN diagram ID from the request
+        encrypted_id = request.data.get("encrypted_id", "")
+        print("Encrypted ID:", encrypted_id)
+
+        # Fetch BPMN XML from the database
+        try:
+            diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
+            bpmn_xml = diagram.bpmn_xml
+            #print("BPMN XML:", bpmn_xml)
+        except BPMNDiagram.DoesNotExist:
+            return Response({"error": "BPMN diagram not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Define prompt for OpenAI to generate documentation
+        prompt = f"""
+        Generate a well-structured, detailed documentation for the following BPMN diagram.
+        Ensure the response follows this format:
+        1. Overview: A brief description of the workflow.
+        2. Workflow Steps: Explain each step in order.
+        3. Key Roles & Responsibilities: Identify key participants.
+        4. Rules & Considerations: Important conditions or logic.
+        do not use star mark, use plain formal text
+        
+        BPMN XML:
+        {bpmn_xml}
+        """
+
+        # Send request to OpenAI
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert BPMN documentation generator."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        bot_message = response.choices[0].message.content
+        #print(bot_message)
+
+        return Response({"reply": bot_message}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print("Error:", e)
+        return Response(
+            {"error": "Failed to generate documentation. Please try again."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def optimize(request, encrypted_id):
+    try:
+        diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
+        bpmn_xml = diagram.bpmn_xml
+        # print("BPMN XML:", bpmn_xml)
+
+        system_instruction = """You are an expert BPMN diagram optimizer. Optimize the following BPMN diagram if not optimized. Only Write what you have done to optimize the diagram inside '```msgYOUR_CHANGES```'. and then generate the optimized BPMN XML."""
+        prompt = f""" Optimize the following BPMN diagram to make it more efficient and readable.""" + f"\n{bpmn_xml}"
+        # Send request to api
+        xml_data = ""
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ]            
+
+        )
+        bot_msg = response.choices[0].message.content
+        print("Bot Message:", bot_msg)
+        msg = bot_msg.split('```xml')[0]
+        xml_data = bot_msg.split('```xml')[1].split('```')[0]
+        print("Optimized XML:", msg)
+        return Response({"xml_data": xml_data,
+                         "msg": msg
+},
+             status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print("Error:", e)
+        return Response(
+            {"error": "Failed to optimize BPMN. Please try again."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

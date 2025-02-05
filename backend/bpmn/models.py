@@ -5,6 +5,22 @@ from scripts.encryption import encrypt_data
 
 # Existing Models: User, Tag, Project, etc.
 
+class Folder(models.Model):
+    name = models.CharField(max_length=255)
+    encrypted_folder_id = models.CharField(max_length=255, blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="folders")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+    
+    def save(self, *args, **kwargs):
+        if not self.encrypted_folder_id:
+            self.encrypted_folder_id = encrypt_data(str(self.id))
+
+            
+        super().save(*args, **kwargs)
+    
 class BPMNDiagram(models.Model):
     user = models.ForeignKey(
         User, 
@@ -13,7 +29,7 @@ class BPMNDiagram(models.Model):
     )
     name = models.CharField(max_length=255)
     encrypted_id = models.CharField(max_length=255, blank=True, null=True)
-    # description = models.TextField(blank=True, null=True)
+    folder = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name="diagrams", blank=True, null=True)
     
     bpmn_xml = models.TextField()
     bpmn_svg = models.TextField(blank=True, null=True)
@@ -152,3 +168,4 @@ class BPMNTemplate(models.Model):
 
     def __str__(self):
         return self.name
+

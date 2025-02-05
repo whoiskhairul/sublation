@@ -1,6 +1,6 @@
 
 from django.contrib import admin
-from .models import BPMNConversation, Message, BPMNDiagram, DiagramShare, DiagramVersion,BPMNTemplate
+from .models import BPMNConversation, Folder, Message, BPMNDiagram, DiagramShare, DiagramVersion,BPMNTemplate
 
 class DiagramShareInline(admin.TabularInline):
 
@@ -38,7 +38,7 @@ class BPMNDiagramAdmin(admin.ModelAdmin):
             'fields': ('name', 'user', 'privacy', 'encrypted_id', )
         }),
         ('BPMN Content', {
-            'fields': ('bpmn_xml', 'bpmn_svg', 'generated_from_text')
+            'fields': ('bpmn_xml', 'bpmn_svg', 'generated_from_text', 'folder', )
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at')
@@ -84,3 +84,8 @@ class DiagramVersionAdmin(admin.ModelAdmin):
 @admin.register(BPMNTemplate)
 class BPMNTemplateAdmin(admin.ModelAdmin):
     list_display = ('name', 'created_at')
+
+@admin.register(Folder)
+class FolderAdmin(admin.ModelAdmin):
+    list_display = ('name', 'user')
+    search_fields = ('name', 'user__username')

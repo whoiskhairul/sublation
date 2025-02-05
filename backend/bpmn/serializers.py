@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import BPMNDiagram, DiagramShare, Message, BPMNConversation, BPMNTemplate,DiagramVersion
+from .models import BPMNDiagram, DiagramShare, Folder, Message, BPMNConversation, BPMNTemplate,DiagramVersion
 
 class BpmnDiagramSelializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(format=" %I:%M %p, %d %b, %Y")
@@ -30,4 +30,10 @@ class DiagramVersionSerializer(serializers.ModelSerializer):
 class BpmnTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = BPMNTemplate
+        fields = '__all__'
+
+
+class FolderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Folder
         fields = '__all__'

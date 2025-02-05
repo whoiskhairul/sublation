@@ -8,7 +8,7 @@ def write_bpmn_file(bot_message):
         f.write(bot_message)
     return
 
-def save_bpmn(user, template_xml = '', template_svg = ''):
+def save_bpmn(user, template_xml = '', template_svg = '', folder = None):
     if template_xml:
         bpmn_xml = template_xml
         bpmn_svg = template_svg
@@ -25,7 +25,7 @@ def save_bpmn(user, template_xml = '', template_svg = ''):
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="0" height="0" viewBox="0 0 0 0" version="1.1"></svg>"""
     name = "Untitled Diagram"
-    bpmn = BPMNDiagram(user = user, name = name, bpmn_xml = bpmn_xml, bpmn_svg= bpmn_svg)
+    bpmn = BPMNDiagram(user = user, name = name, bpmn_xml = bpmn_xml, bpmn_svg= bpmn_svg, folder = folder)
     bpmn.save()
     return
 
