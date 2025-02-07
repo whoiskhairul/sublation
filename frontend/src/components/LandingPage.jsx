@@ -75,8 +75,18 @@ const LandingPage = () => {
       </section>
       <footer className="footer">
       This website has been developed as part of the Web Engineering Planspiel Project offered at TU Chemnitz.
+      <br/>
+      <br/>
+
+        <p style={{ fontStyle: "italic", fontSize: "0.75rem", fontWeight: "normal" }}>
+          Image of Landing page is made by <a href="https://www.freepik.com/free-vector/medical-workers-analyzing-electronic-record_4950247.htm#from_view=detail_alsolike" className="underline">katemangostar on Freepik</a>
+          <br/>
+          Chatbot icon is made by <a href="https://www.flaticon.com/free-icons/chatbot" className="underline" title="chatbot icons">Flowicon - Flaticon</a>
+        </p>
     </footer>
+   
     </div>
+
     </div>
   );
 };
