@@ -36,8 +36,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project code
 COPY . .
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
+# Create static directory and collect static files
+RUN mkdir -p staticfiles && python manage.py collectstatic --noinput
 
 # Exposing the ports we need (example: Django on 8000, Redis on 6379)
 EXPOSE 8000 6379
