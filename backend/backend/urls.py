@@ -29,5 +29,4 @@ urlpatterns = [
     path('bpmn/', include('bpmn.urls')),  # Add this line
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('bpmn-error-detection/', include('bpmn_error_detection.urls')),
 ]

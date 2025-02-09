@@ -41,8 +41,6 @@ INSTALLED_APPS = [
     'appointment_chatbot',
     'authentication',
     'bpmn',
-    'bpmn_error_detection',
-    
 
     # third party apps
     'django_json_widget', #for easier input of JSONField in the admin panel
