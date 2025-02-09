@@ -270,7 +270,12 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       }
     };
 
+    let lastCursorUpdate = 0;
     const handleMouseMove = (event) => {
+      const now = Date.now();
+      if (now - lastCursorUpdate < 200) return; // Throttle: 5 times per second
+      lastCursorUpdate = now;
+
       const boundingRect = modelerRef.current._container.getBoundingClientRect();
       const x = event.clientX - boundingRect.left;
       const y = event.clientY - boundingRect.top;
