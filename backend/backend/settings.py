@@ -170,7 +170,6 @@ STATIC_URL = '/static/'
 
 # Directory where static files will be collected 
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE="whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
 # Additional directories to look for static files
