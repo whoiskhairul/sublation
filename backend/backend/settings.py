@@ -269,7 +269,8 @@ SESSION_COOKIE_SECURE = True      # Required for SameSite=None to work
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
-    "https://folia.sublation.tech"
+    "https://folia.sublation.tech",
+    "https://pure-celebration-production.up.railway.app",
     
 ]
 CORS_ALLOW_HEADERS = [
