@@ -32,10 +32,12 @@ RUN apt-get update && apt-get install -y \
 # Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN python manage.py collectstatic --noinput
 
 # Copy project code
 COPY . .
+
+# Collect static files
+RUN python manage.py collectstatic --noinput
 
 # Exposing the ports we need (example: Django on 8000, Redis on 6379)
 EXPOSE 8000 6379
