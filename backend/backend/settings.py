@@ -26,6 +26,9 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')  # Fetch from environment variable
 # Application definition
 
 INSTALLED_APPS = [
+
+    "whitenoise.runserver_nostatic",
+    
     #for websocket support 
     'channels',
     'daphne',
@@ -64,6 +67,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # for serving static files
     'allauth.account.middleware.AccountMiddleware', # allauth middleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # for enabling CORS headers 
@@ -166,6 +170,8 @@ STATIC_URL = '/static/'
 
 # Directory where static files will be collected 
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE="whitenoise.storage.CompressedManifestStaticFilesStorage"
+
 
 # Additional directories to look for static files
 STATICFILES_DIRS = [
