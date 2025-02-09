@@ -260,10 +260,6 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
-SESSION_COOKIE_SAMESITE = "None"  # Allow cross-site cookies
-SESSION_COOKIE_SECURE = True      # Required for SameSite=None to work
-CSRF_COOKIE_SAMESITE = "None"     # Allow CSRF cookies in cross-site requests
-CSRF_COOKIE_SECURE = True
 
 
 CSRF_TRUSTED_ORIGINS = [
