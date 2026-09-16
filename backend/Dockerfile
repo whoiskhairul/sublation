@@ -35,9 +35,8 @@ COPY . .
 # Create static directory and collect static files
 # RUN mkdir -p staticfiles && python manage.py collectstatic --noinput
 
-# Exposing the ports we need (example: Django on 8000, Redis on 6379)
-EXPOSE 8000 6379
-# EXPOSE 6379  
+# Expose only web application port
+EXPOSE 8000
 
-# Start Redis, run migrations, collectstatic, and start ASGI server with daphne (handling both HTTP and WebSockets)
-CMD ["sh", "-c", "redis-server --bind 0.0.0.0 --port 6379 & python manage.py migrate && python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 backend.asgi:application"]
+# Run migrations with --fake-initial, collectstatic, and start Daphne ASGI server
+CMD ["sh", "-c", "python manage.py migrate --fake-initial && python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 backend.asgi:application"]
