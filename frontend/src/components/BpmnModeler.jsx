@@ -279,7 +279,10 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions, animatePla
 
   const localStorageUser = localStorage.getItem('user');
   const localStorageUserObject = localStorageUser ? JSON.parse(localStorageUser) : null;
-  const userId = useRef(localStorageUserObject ? localStorageUserObject.username : `Guest_${Math.floor(Math.random() * 1000)}`);
+  // Generate or retrieve a per-tab session ID so multi-tab collaboration works even under the same account
+  const tabSessionId = useRef(Math.random().toString(36).substring(2, 7));
+  const baseUsername = localStorageUserObject?.username || `Guest_${Math.floor(Math.random() * 1000)}`;
+  const userId = useRef(`${baseUsername}#${tabSessionId.current}`);
 
   // Helper to recompute screen coordinates for all remote cursors whenever local canvas viewbox changes (pan/zoom)
   const updateScreenCursors = (remoteCursorsMap) => {
