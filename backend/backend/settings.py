@@ -292,24 +292,26 @@ REDISHOST = os.getenv('REDISHOST', '127.0.0.1')
 USE_REDIS = os.getenv('USE_REDIS', '').lower() in ('true', '1')
 
 REDIS_URL = os.getenv('REDIS_URL')
+if REDIS_URL:
+    REDIS_URL = REDIS_URL.strip().strip('"\'')
+    if REDIS_URL.startswith('REDIS_URL='):
+        REDIS_URL = REDIS_URL[len('REDIS_URL='):].strip().strip('"\'')
 
 import ssl
 
 def get_channel_layers():
     # If explicitly enabled, in production, or REDIS_URL is provided, use RedisChannelLayer
     if REDIS_URL:
-        # Upstash requires TLS/SSL (rediss://). Python redis client needs an SSLContext without strict verification.
+        # Upstash requires TLS/SSL (rediss://). Pass ssl_cert_reqs=None and ssl_check_hostname=False
         if REDIS_URL.startswith("rediss://"):
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
             return {
                 "default": {
                     "BACKEND": "channels_redis.core.RedisChannelLayer",
                     "CONFIG": {
                         "hosts": [{
                             "address": REDIS_URL,
-                            "ssl": ssl_context,
+                            "ssl_cert_reqs": None,
+                            "ssl_check_hostname": False,
                         }],
                     },
                 },

@@ -323,11 +323,12 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions, animatePla
     const connectWebSocket = () => {
       if (isCleanedUp) return;
       const socketUrl = config.socketBaseurl + '/ws/bpmn/' + socketRoomId + '/';
+      console.log('Connecting to WebSocket:', socketUrl);
       const ws = new WebSocket(socketUrl);
       socket.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connection opened');
+        console.log('WebSocket connection opened successfully:', socketUrl);
         setWsConnected(true);
         reconnectAttempts = 0;
 
