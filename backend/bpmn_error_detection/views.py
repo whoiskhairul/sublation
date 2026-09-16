@@ -6,8 +6,12 @@ from django.conf import settings
 import uuid
 import openai  
 
-openai.api_key = settings.OPENAI_API_KEY
-client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+openai.api_key = settings.GEMINI_API_KEY
+client = openai.OpenAI(
+    api_key=settings.GEMINI_API_KEY,
+    base_url=settings.GEMINI_BASE_URL
+)
+AI_MODEL = settings.GEMINI_MODEL
 
 
 @api_view(['POST'])
@@ -274,19 +278,19 @@ def generate_natural_description(element_data):
 
 def enhance_with_ai(text):
     """
-    Uses OpenAI GPT to refine BPMN workflow descriptions.
+    Uses Gemini (via OpenAI SDK) to refine BPMN workflow descriptions.
     """
-    openai.api_key = OPENAI_API_KEY
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
+        response = client.chat.completions.create(
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": "Refine this BPMN workflow description into a structured, professional, and easy-to-read explanation."},
                 {"role": "user", "content": text}
             ]
         )
-        return response['choices'][0]['message']['content']
+        return response.choices[0].message.content
     except Exception as e:
+        print("AI enhancement error:", e)
         return text  # Fallback to the original text if API fails
 
 @api_view(['POST'])

@@ -12,17 +12,8 @@ RUN npm install
 
 
 # Copy all project files into the container
-COPY . .
-
-RUN npm run build
-
-# Install a static file server
-RUN npm install -g serve
-
-
 # Expose the development server port
 EXPOSE 3000
 
-
-# Command to serve the built files
-CMD ["serve", "dist", "-l", "3000"]
+# Start Vite dev server
+CMD ["npm", "run", "dev"]

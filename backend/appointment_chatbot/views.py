@@ -10,8 +10,12 @@ import openai
 
 from .models import Appointment, Doctor, PersonaInstruction
 
-openai.api_key = settings.OPENAI_API_KEY
-client = openai.OpenAI(api_key = settings.OPENAI_API_KEY)
+openai.api_key = settings.GEMINI_API_KEY
+client = openai.OpenAI(
+    api_key=settings.GEMINI_API_KEY,
+    base_url=settings.GEMINI_BASE_URL
+)
+AI_MODEL = settings.GEMINI_MODEL
 
 # Create your views here.
 
@@ -56,11 +60,11 @@ def chatbot_response(request):
                 ]
             prompts.extend(request.session.get('conversation'))
 
-            # Generate a response using the OpenAI ChatCompletion API
+            # Generate a response using the Gemini API via OpenAI SDK
             response = client.chat.completions.create(
-                model="gpt-4o", 
+                model=AI_MODEL, 
                 messages=prompts
-                )
+            )
 
             bot_message = response.choices[0].message.content
             print(bot_message)

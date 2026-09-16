@@ -1,0 +1,14 @@
+{
+  "extends": "bpmnlint:recommended",
+  "rules": {
+    "start-event-required": "error",
+    "end-event-required": "error",
+    "no-disconnected": "error",
+    "no-implicit-split": "warn",
+    "no-implicit-end": "warn",
+    "no-implicit-start": "warn",
+    "no-duplicate-sequence-flows": "error",
+    "fake-join": "warn",
+    "no-complex-gateway": "warn"
+  }
+}

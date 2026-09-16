@@ -7,7 +7,7 @@ from scripts.encryption import encrypt_data
 
 class Folder(models.Model):
     name = models.CharField(max_length=255)
-    encrypted_folder_id = models.CharField(max_length=255, blank=True, null=True)
+    encrypted_folder_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="folders")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -15,11 +15,11 @@ class Folder(models.Model):
         return self.name
     
     def save(self, *args, **kwargs):
-        if not self.encrypted_folder_id:
-            self.encrypted_folder_id = encrypt_data(str(self.id))
-
-            
         super().save(*args, **kwargs)
+        if not self.encrypted_folder_id and self.id:
+            self.encrypted_folder_id = encrypt_data(str(self.id))
+            Folder.objects.filter(pk=self.pk).update(encrypted_folder_id=self.encrypted_folder_id)
+
     
 class BPMNDiagram(models.Model):
     user = models.ForeignKey(
@@ -28,7 +28,7 @@ class BPMNDiagram(models.Model):
         related_name='diagrams'
     )
     name = models.CharField(max_length=255)
-    encrypted_id = models.CharField(max_length=255, blank=True, null=True)
+    encrypted_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     folder = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name="diagrams", blank=True, null=True)
     
     bpmn_xml = models.TextField()
@@ -84,16 +84,17 @@ class BPMNDiagram(models.Model):
     #     default='draft'
     # )
     def save(self, *args, **kwargs):
+        is_new = self._state.adding
         super().save(*args, **kwargs)
 
         # Generate and Save the encrypted ID in the database
-        if not self.encrypted_id:
+        if not self.encrypted_id and self.id:
             self.encrypted_id = encrypt_data(str(self.id))
-            
-            super().save(*args, **kwargs)
+            BPMNDiagram.objects.filter(pk=self.pk).update(encrypted_id=self.encrypted_id)
         
-        #Create BPMNConversation object from the BPMNDiagram object
-        BPMNConversation.objects.get_or_create(user=self.user, bpmn=self)
+        # Create BPMNConversation object from the BPMNDiagram object
+        if is_new or not BPMNConversation.objects.filter(bpmn=self).exists():
+            BPMNConversation.objects.get_or_create(user=self.user, bpmn=self)
     
     
 

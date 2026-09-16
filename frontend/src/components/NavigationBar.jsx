@@ -88,66 +88,122 @@ const NavigationBar = () => {
     <>
       <nav className="navbar">
         <div className="navbar-left">
-          <div
-            className="menu-icon"
+          <button
+            type="button"
+            className="menu-icon-btn"
             onClick={toggleSidebar}
+            aria-label="Toggle Menu"
           >
-            ☰
-          </div>
-          <div className="logo-container" style={{cursor:'pointer'}} onClick={() => navigate('/homepage')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div className="logo-container" onClick={() => navigate('/homepage')}>
             <img src={logo} alt="Folia Logo" className="logo-image" />
             <span className="logo-text">Folia</span>
+          </div>
+
+          <div className="navbar-nav-links">
+            <button className="nav-link-btn" onClick={() => navigate('/homepage')}>Home</button>
+            <button className="nav-link-btn" onClick={() => navigate('/homepage/templates/')}>Templates</button>
+            <button className="nav-link-btn" onClick={() => navigate('/image-to-bpmn')}>Image to BPMN</button>
+            <button className="nav-link-btn" onClick={() => navigate('/faq')}>FAQ</button>
           </div>
         </div>
 
         <div className="navbar-right">
-          <div className="navbar-user" onClick={toggleDropdown}>
-            Hi, <span className="username">{user ? user.username : 'Guest'}</span>
-          </div>
-          {/* Dropdown Menu */}
-        {isDropdownVisible && (
-          <div className="dropdown-menu"onMouseLeave={handleMouseLeaveForDropdown}>
-            <div className="dropdown-header">
-              <span className="dropdown-avatar">👤</span>
-              <div className="dropdown-info" onClick={() => navigate('/homepage')}>
-                <p className="dropdown-name">{user?.username || 'Guest'}</p>
-                <p className="dropdown-email">{user?.email || 'example@gmail.com'}</p>
-              </div>
+          <div className="navbar-user-chip" onClick={toggleDropdown}>
+            <div className="user-avatar-small">
+              {user?.username ? user.username.charAt(0).toUpperCase() : 'G'}
             </div>
-            <hr />
-            <ul className="dropdown-options">
-              {/* <li>
-                <span className="dropdown-icon">⚙️</span> Settings
-              </li> */}
-              <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-                <span className="dropdown-icon">🔓</span> Logout
-              </li>
-            </ul>
+            <span className="user-display-name">{user?.username || 'Guest'}</span>
+            <svg className={`chevron-icon ${isDropdownVisible ? 'rotate' : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
           </div>
-        )}
-          
+
+          {/* Dropdown Menu */}
+          {isDropdownVisible && (
+            <div className="dropdown-menu" onMouseLeave={handleMouseLeaveForDropdown}>
+              <div className="dropdown-header">
+                <div className="user-avatar-large">
+                  {user?.username ? user.username.charAt(0).toUpperCase() : 'G'}
+                </div>
+                <div className="dropdown-info" onClick={() => navigate('/homepage')}>
+                  <p className="dropdown-name">{user?.username || 'Guest'}</p>
+                  <p className="dropdown-email">{user?.email || 'example@gmail.com'}</p>
+                </div>
+              </div>
+              <ul className="dropdown-options">
+                <li onClick={() => { setDropdownVisible(false); navigate('/homepage'); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                  </svg>
+                  My Diagrams
+                </li>
+                <li onClick={() => { setDropdownVisible(false); navigate('/homepage/templates/'); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="3" y1="9" x2="21" y2="9"></line>
+                    <line x1="9" y1="21" x2="9" y2="9"></line>
+                  </svg>
+                  Template Gallery
+                </li>
+                <li className="logout-option" onClick={handleLogout}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
+                  Log out
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
       </nav>
+
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)}></div>}
 
       {/* Sidebar */}
       <div
         ref={sidebarRef}
         className={`sidebar ${isSidebarOpen ? 'open' : ''}`}
-        onMouseLeave={handleMouseLeave} // Auto-close on mouse leave
       >
         <div className="sidebar-header">
-          <img src={logo} alt="Profile" className="profile-image" />
-          <div className="sidebar_user_info" onClick={() => navigate('/homepage')}>
+          <div className="user-avatar-large" style={{ backgroundColor: '#2563EB' }}>
+            {user?.username ? user.username.charAt(0).toUpperCase() : 'G'}
+          </div>
+          <div className="sidebar_user_info" onClick={() => { navigate('/homepage'); setSidebarOpen(false); }}>
             <p className="profile-name">{user?.username || 'Guest'}</p>
             <p className="profile-email">{user?.email || 'example@gmail.com'}</p>
           </div>
         </div>
         <ul className="sidebar-options">
-          <li onClick={() => navigate('/homepage')}>Home</li>
-          <li onClick={() => navigate('/image-to-bpmn')}>Image To BPMN</li>          
-          <li onClick={() => navigate('/homepage/templates/')}>Templates</li>
-          <li onClick={() => navigate('/faq')}>FAQ</li>
-          <li onClick={handleLogout}>Log out</li>
+          <li onClick={() => { navigate('/homepage'); setSidebarOpen(false); }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            Home
+          </li>
+          <li onClick={() => { navigate('/homepage/templates/'); setSidebarOpen(false); }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            Templates
+          </li>
+          <li onClick={() => { navigate('/image-to-bpmn'); setSidebarOpen(false); }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            Image To BPMN
+          </li>
+          <li onClick={() => { navigate('/faq'); setSidebarOpen(false); }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            FAQ
+          </li>
+          <li className="sidebar-logout-btn" onClick={handleLogout}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            Log out
+          </li>
         </ul>
       </div>
     </>

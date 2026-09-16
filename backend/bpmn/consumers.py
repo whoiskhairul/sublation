@@ -5,6 +5,7 @@ class BPMNConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'bpmn_{self.room_name}'
+        self.user = None
 
         # Join the WebSocket group
         await self.channel_layer.group_add(
@@ -15,14 +16,15 @@ class BPMNConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        # Notify others to remove this user's cursor and presence
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'user_left',
-                'user': self.channel_name,
-            }
-        )
+        # Notify others to remove this user's cursor, selections, and presence
+        if self.user:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'user_left',
+                    'user': self.user,
+                }
+            )
 
         # Leave the WebSocket group
         await self.channel_layer.group_discard(
@@ -32,54 +34,83 @@ class BPMNConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         data = json.loads(text_data)
+        action = data.get('action')
 
-        if data['action'] == 'update_cursor':
-            # Broadcast cursor position to the room
+        if action == 'ping':
+            # Keepalive ping/pong to prevent proxy and browser timeout disconnects
+            await self.send(text_data=json.dumps({'action': 'pong'}))
+            return
+
+        if action == 'update_cursor':
+            # Broadcast cursor position in diagram canvas coordinates
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'update_cursor',
-                    'user': data['user'],
-                    'position': data['position'],
-                    'color': data['color'],
+                    'user': data.get('user'),
+                    'position': data.get('position'),
+                    'color': data.get('color'),
                 }
             )
-        elif data['action'] == 'remove_cursor':
+        elif action == 'remove_cursor':
             # Notify the room to remove the user's cursor
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'remove_cursor',
-                    'user': data['user'],
+                    'user': data.get('user'),
                 }
             )
-        elif data['action'] == 'update_xml':
+        elif action == 'element_selected':
+            # Broadcast element selection footprint to the room
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'element_selected',
+                    'user': data.get('user'),
+                    'elementIds': data.get('elementIds', []),
+                    'color': data.get('color'),
+                }
+            )
+        elif action == 'element_deselected':
+            # Broadcast element deselection to the room
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'element_deselected',
+                    'user': data.get('user'),
+                    'elementIds': data.get('elementIds', []),
+                }
+            )
+        elif action == 'update_xml':
             # Broadcast XML updates to the room
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'update_xml',
-                    'xml': data['xml'],
-                    'user': data['user'],
-                    
+                    'xml': data.get('xml'),
+                    'user': data.get('user'),
                 }
             )
-        elif data['action'] == 'user_joined':
+        elif action == 'user_joined':
+            self.user = data.get('user')
             # Notify the room of a new user
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'user_joined',
-                    'user': data['user'],
+                    'user': data.get('user'),
+                    'color': data.get('color'),
                 }
             )
-        elif data['action'] == 'user_left':
+        elif action == 'user_left':
             # Notify the room that a user has left
+            user_leaving = data.get('user') or self.user
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'user_left',
-                    'user': data['user'],
+                    'user': user_leaving,
                 }
             )
 
@@ -99,13 +130,29 @@ class BPMNConsumer(AsyncWebsocketConsumer):
             'user': event['user'],
         }))
 
+    async def element_selected(self, event):
+        # Notify clients of element selection footprint
+        await self.send(text_data=json.dumps({
+            'action': 'element_selected',
+            'user': event['user'],
+            'elementIds': event['elementIds'],
+            'color': event.get('color', '#3357FF'),
+        }))
+
+    async def element_deselected(self, event):
+        # Notify clients of element deselection
+        await self.send(text_data=json.dumps({
+            'action': 'element_deselected',
+            'user': event['user'],
+            'elementIds': event.get('elementIds', []),
+        }))
+
     async def update_xml(self, event):
         # Broadcast XML changes
         await self.send(text_data=json.dumps({
             'action': 'update_xml',
             'xml': event['xml'],
             'user': event['user'],
-
         }))
 
     async def user_joined(self, event):
@@ -113,6 +160,7 @@ class BPMNConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'action': 'user_joined',
             'user': event['user'],
+            'color': event.get('color'),
         }))
 
     async def user_left(self, event):

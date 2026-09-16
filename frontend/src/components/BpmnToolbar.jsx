@@ -23,7 +23,7 @@ import { jsPDF } from "jspdf";
 
 const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
     onSaveClick, onZoomIn, onZoomOut, onReset, onUndo, onRedo,
-    onPrint, onTimeLineClick, onSaveAsClick, onOptimizedXml }) => {
+    onPrint, onTimeLineClick, onSaveAsClick, onOptimizedXml, initialOpenOptimizer = false }) => {
     const { encryptedID } = useParams();
     const navigate = useNavigate();
     const [anchorEl, setAnchorEl] = React.useState(null);
@@ -37,8 +37,16 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
     const [isLoadingDoc, setIsLoadingDoc] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editedText, setEditedText] = useState('');
-    const [optidialog, setOptidialog] = useState(false);
+    const [optidialog, setOptidialog] = useState(initialOpenOptimizer);
     const [isOptimizing, setIsOptimizing] = useState(false);
+    const [optiGoal, setOptiGoal] = useState('comprehensive');
+    const [optimizationResult, setOptimizationResult] = useState(null); // { xml, msg, goal }
+
+    useEffect(() => {
+        if (initialOpenOptimizer) {
+            setOptidialog(true);
+        }
+    }, [initialOpenOptimizer]);
 
     const handleGenerateDocumentation = async () => {
 
@@ -320,417 +328,633 @@ const BpmnToolbar = ({ diagramName, permissions, onNewDiagram,
     };
 
     return (
-        <div>
-            <Paper
+        <div style={{ width: '100%' }}>
+            {/* Unified Modern Toolbar */}
+            <AppBar
+                position="static"
                 elevation={0}
                 sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    paddingX: '8px',
-                    backgroundColor: '#f5f5f5',
-                    borderRadius: '4px',
-                    marginX: '2px',
                     marginTop: '65px',
+                    backgroundColor: '#ffffff',
+                    color: '#1e293b',
+                    borderBottom: '1px solid #e2e8f0',
+                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+                    px: { xs: 1, sm: 2 },
+                    py: 0.5
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    {permissions === 'editor' ? (
-                        <TextField
-                            id='renameDiagram'
-                            value={localDiagramName}
-                            type="text"
-                            name='name'
-                            variant="standard"
-                            onChange={handleNameChange}
-                            onBlur={submitDiagramName}
-                            onKeyDown={handleKeyDown}
+                <Toolbar
+                    variant="dense"
+                    disableGutters
+                    sx={{
+                        minHeight: 52,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1.5,
+                        flexWrap: 'nowrap',
+                        overflowX: 'auto'
+                    }}
+                >
+                    {/* Left Section: Document Identity & File Actions */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexShrink: 1 }}>
+                        {/* Diagram Name & Permission Chip */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                            {permissions === 'editor' ? (
+                                <TextField
+                                    id="renameDiagram"
+                                    value={localDiagramName}
+                                    type="text"
+                                    name="name"
+                                    variant="standard"
+                                    onChange={handleNameChange}
+                                    onBlur={submitDiagramName}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Diagram Name"
+                                    InputProps={{ disableUnderline: true }}
+                                    sx={{
+                                        '& .MuiInputBase-input': {
+                                            fontWeight: 600,
+                                            fontSize: '0.925rem',
+                                            color: '#0f172a',
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            border: '1px solid transparent',
+                                            transition: 'border-color 0.15s, background-color 0.15s',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            maxWidth: '220px',
+                                            '&:hover': {
+                                                borderColor: '#cbd5e1',
+                                                backgroundColor: '#f8fafc'
+                                            },
+                                            '&:focus': {
+                                                borderColor: '#2563eb',
+                                                backgroundColor: '#ffffff'
+                                            }
+                                        }
+                                    }}
+                                />
+                            ) : (
+                                <Typography
+                                    sx={{
+                                        fontWeight: 600,
+                                        fontSize: '0.925rem',
+                                        color: '#0f172a',
+                                        px: 1,
+                                        maxWidth: '220px',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}
+                                >
+                                    {localDiagramName || 'Untitled Diagram'}
+                                </Typography>
+                            )}
+
+                            <Chip
+                                label={permissions}
+                                size="small"
+                                variant="outlined"
+                                color={permissions === 'editor' ? 'primary' : 'default'}
+                                sx={{
+                                    height: '22px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 600,
+                                    textTransform: 'capitalize',
+                                    borderRadius: '4px'
+                                }}
+                            />
+                        </div>
+
+                        <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center', mx: 0.5 }} />
+
+                        {/* File Menu Dropdown */}
+                        <Button
+                            size="small"
+                            variant="text"
+                            onClick={handleMenuClick}
+                            disabled={permissions !== 'editor'}
+                            startIcon={<FolderOpen sx={{ fontSize: 18 }} />}
                             sx={{
-                                width: 'auto',
-                                '& .MuiInputBase-input': {
-                                    width: `${localDiagramName.length + 3}ch`,
-                                    minWidth: '4ch',
-                                    marginX: '1rem',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 500
-                                },
-                                '& .MuiInput-underline:before': {
-                                    borderBottom: 'none'
-                                },
-                                '&:hover .MuiInput:before': {
-                                    borderBottom: '2px solid rgba(0, 0, 0, 0.42)'
-                                }
-                            }}
-                        />
-                    ) : (
-                        <Typography
-                            variant="h6"
-                            sx={{
-                                marginX: '1rem',
-                                fontSize: '0.8rem',
+                                textTransform: 'none',
                                 fontWeight: 500,
-                                color: 'rgba(0, 0, 0, 0.87)'
+                                fontSize: '0.825rem',
+                                color: '#334155',
+                                minWidth: 'auto',
+                                px: 1,
+                                height: 32,
+                                borderRadius: '6px',
+                                '&:hover': { backgroundColor: '#f1f5f9' }
                             }}
                         >
-                            {localDiagramName}
-                        </Typography>
-                    )}
-                </div>
-                <Chip
-                    label={permissions}
-                    size="small"
-                    color={permissions === 'editor' ? 'primary' : 'secondary'}
-                    sx={{
-                        marginRight: '1rem',
-                        padding: '4px 8px 4px 8px',
-                        textTransform: 'capitalize',
-                        fontWeight: 500
-                    }}
-                />
-            </Paper>
+                            File
+                        </Button>
 
-            <AppBar position="static" style={{ backgroundColor: '#fff', color: '#333', boxShadow: 'none', border: '1px solid #ddd' }}>
-                <Toolbar style={{ justifyContent: 'space-between' }}>
-                    {/* Left Section */}
-                    <div style={{ display: 'flex', alignItems: 'center', flexDirection: 'row' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <IconButton size="small" aria-label="open-bpmn" onClick={handleMenuClick} disabled={permissions !== 'editor'}>
-                                <FolderOpen fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>File</Typography>
-                        </div>
+                        {/* Save Button */}
+                        {permissions === 'editor' && (
+                            <Tooltip title="Save Diagram (Ctrl+S)">
+                                <Button
+                                    size="small"
+                                    variant="contained"
+                                    onClick={onSaveClick}
+                                    startIcon={<Save sx={{ fontSize: 16 }} />}
+                                    sx={{
+                                        textTransform: 'none',
+                                        fontWeight: 500,
+                                        fontSize: '0.825rem',
+                                        height: 32,
+                                        px: 1.5,
+                                        borderRadius: '6px',
+                                        boxShadow: 'none',
+                                        backgroundColor: '#2563eb',
+                                        '&:hover': {
+                                            backgroundColor: '#1d4ed8',
+                                            boxShadow: 'none'
+                                        }
+                                    }}
+                                >
+                                    Save
+                                </Button>
+                            </Tooltip>
+                        )}
+                    </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }}>
-                            <IconButton size="small" aria-label="undo" onClick={onUndo}>
-                                <Undo fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Undo</Typography>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 8 }}>
-                            <IconButton size="small" aria-label="redo" onClick={onRedo}>
-                                <Redo fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Redo</Typography>
-                        </div>
-
-                        {permissions === 'editor' ?
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }} onClick={onSaveClick}>
-                                <IconButton size="small" aria-label="save">
-                                    <Save fontSize="small" />
+                    {/* Center Section: History & View Controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                        <Tooltip title="Undo">
+                            <span>
+                                <IconButton size="small" onClick={onUndo} sx={{ color: '#475569', borderRadius: '6px' }}>
+                                    <Undo fontSize="small" />
                                 </IconButton>
-                                <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Save</Typography>
-                            </div>
-                            : ''
-                        }
+                            </span>
+                        </Tooltip>
 
+                        <Tooltip title="Redo">
+                            <span>
+                                <IconButton size="small" onClick={onRedo} sx={{ color: '#475569', borderRadius: '6px' }}>
+                                    <Redo fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
 
+                        <Divider orientation="vertical" flexItem sx={{ height: 20, alignSelf: 'center', mx: 0.5 }} />
 
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }} onClick={onReset}>
-                            <IconButton size="small" aria-label="save" onClick={onReset}>
-                                <Replay fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Reset</Typography>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }}>
-                            <IconButton size="small" aria-label="zoom-in" onClick={onZoomIn}>
-                                <ZoomIn fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Zoom In</Typography>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 8 }}>
-                            <IconButton size="small" aria-label="zoom-out" onClick={onZoomOut}>
+                        <Tooltip title="Zoom Out">
+                            <IconButton size="small" onClick={onZoomOut} sx={{ color: '#475569', borderRadius: '6px' }}>
                                 <ZoomOut fontSize="small" />
                             </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Zoom Out</Typography>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 8 }}>
-                            <IconButton size="small" aria-label="make-a-version" onClick={onSaveAsClick}>
+                        </Tooltip>
+
+                        <Tooltip title="Zoom In">
+                            <IconButton size="small" onClick={onZoomIn} sx={{ color: '#475569', borderRadius: '6px' }}>
+                                <ZoomIn fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+
+                        <Tooltip title="Reset View">
+                            <IconButton size="small" onClick={onReset} sx={{ color: '#475569', borderRadius: '6px' }}>
+                                <Replay fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+
+                        <Divider orientation="vertical" flexItem sx={{ height: 20, alignSelf: 'center', mx: 0.5 }} />
+
+                        <Tooltip title="Save as Version">
+                            <IconButton size="small" onClick={onSaveAsClick} sx={{ color: '#475569', borderRadius: '6px' }}>
                                 <BookmarkAdd fontSize="small" />
                             </IconButton>
+                        </Tooltip>
 
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Save as Version</Typography>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 8 }}>
-                            <IconButton size="small" aria-label="timeline" onClick={onTimeLineClick}>
+                        <Tooltip title="Version Timeline">
+                            <IconButton size="small" onClick={onTimeLineClick} sx={{ color: '#475569', borderRadius: '6px' }}>
                                 <Timeline fontSize="small" />
                             </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Timeline</Typography>
-                        </div>
-
-                        
-
+                        </Tooltip>
                     </div>
-                    {/* Right Section */}
 
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        {/* Smart Documention Generator */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 8 }}>
-                            <IconButton size="small" aria-label="Documentation" onClick={handleGenerateDocumentation}>
-                                <Description fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Documentation</Typography>
-
-                            <Modal open={openDoc} onClose={() => setOpenDoc(false)}>
-                                <div style={{
-                                    backgroundColor: 'white',
-                                    padding: '20px',
-                                    margin: '5% auto',
-                                    width: '60%',
-                                    maxHeight: '80vh',
-                                    borderRadius: '8px',
-                                    fontFamily: 'Arial, sans-serif',
-                                    fontSize: '12px',
-                                    color: 'black',
-                                    overflowY: 'auto',
-                                    // Scrollbar Styling
-                                    scrollbarWidth: 'thin',  // For Firefox
-                                    scrollbarColor: '#b0b0b0 #f1f1f1', // Thumb & Track color           
-                                }}>
-                                    <div
-                                        style={{
-                                            marginTop: "5px",
-                                            marginBottom: "3px",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            width: "100%",
-
-                                        }}
-                                    >
-                                        <h1 style={{ margin: 0 }}>Smart BPMN Workflow Documentation</h1>
-                                        <div>
-                                            <IconButton onClick={handleCopy}><FileCopy /></IconButton>
-                                            <IconButton onClick={handleDocumentationExport}><GetApp /></IconButton>
-                                        </div>
-                                    </div>
-
-                                    {/* Display Loading Text or Documentation */}
-                                    {isLoadingDoc ? (
-                                        <div style={{ textAlign: 'center', fontSize: '18px', fontWeight: 'bold', marginTop: '20px', marginBottom: '20px' }}>
-                                            <p>⏳Documentation Generating...</p>
-                                        </div>
-                                    ) : (
-                                        <TextareaAutosize
-                                            value={isEditing ? editedText : documentation}
-                                            onChange={(e) => setEditedText(e.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                height: '300px',
-                                                padding: '10px',
-                                                fontFamily: 'Arial, sans-serif',
-                                                fontSize: '20px',
-                                                color: 'black',
-                                                resize: 'none',
-                                                overflowY: 'auto',
-                                                border: '1px solid #ddd',
-                                                borderRadius: '5px',
-                                                // Scrollbar Styling for Chrome & Edge
-                                                WebkitOverflowScrolling: 'touch',
-                                                scrollbarWidth: 'thin',  // For Firefox
-                                            }}
-                                            disabled={!isEditing}
-                                        />
-                                    )}
-                                </div>
-                            </Modal>
-                        </div>
-                        {permissions === 'editor' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }}>
-                            <IconButton
+                    {/* Right Section: Workflow Tools & Export */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        {/* Process Optimization Button */}
+                        {permissions === 'editor' && (
+                            <Button
                                 size="small"
+                                variant="outlined"
                                 onClick={() => setOptidialog(true)}
+                                startIcon={<Build sx={{ fontSize: 16 }} />}
+                                sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 500,
+                                    fontSize: '0.825rem',
+                                    height: 32,
+                                    px: 1.5,
+                                    borderRadius: '6px',
+                                    borderColor: '#93c5fd',
+                                    color: '#1d4ed8',
+                                    backgroundColor: '#eff6ff',
+                                    '&:hover': {
+                                        borderColor: '#60a5fa',
+                                        backgroundColor: '#dbeafe'
+                                    }
+                                }}
                             >
-                                <Build fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Optimize</Typography>
-                        </div>
-                        ) : ''}
-                        
-                        <div>
-                            <Dialog
-                                open={Boolean(optidialog)}
-                                onClose={() => setOptidialog(null)}
-                                maxWidth="sm"
-                                fullWidth
+                                Optimize
+                            </Button>
+                        )}
+
+                        {/* Documentation Modal Button */}
+                        <Tooltip title="Generate Workflow Documentation">
+                            <Button
+                                size="small"
+                                variant="text"
+                                onClick={handleGenerateDocumentation}
+                                startIcon={<Description sx={{ fontSize: 17 }} />}
+                                sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 500,
+                                    fontSize: '0.825rem',
+                                    height: 32,
+                                    px: 1.25,
+                                    color: '#334155',
+                                    borderRadius: '6px',
+                                    '&:hover': { backgroundColor: '#f1f5f9' }
+                                }}
                             >
-                                <DialogTitle>Process Optimization</DialogTitle>
-                                <DialogContent>
-                                    <DialogContentText>
-                                        Would you like to optimize your BPMN process? This will analyze your workflow and suggest improvements.
-                                    </DialogContentText>
-                                    <Alert severity="info" sx={{ mt: 2 }}>
-                                        This feature will analyze your process for:
-                                        <ul>
-                                            <li>Potential bottlenecks</li>
-                                            <li>Parallel processing opportunities</li>
-                                            <li>Redundant steps</li>
-                                        </ul>
-                                    </Alert>
-                                    <Alert severity="warning" sx={{ mt: 2 }}>
-                                        Please note that this feature is experimental and may not work as expected.
-                                    </Alert>
-                                </DialogContent>
-                                <DialogActions>
-                                    <Button onClick={() => setOptidialog(null)}>Cancel</Button>
-                                    <Button
-                                        variant="contained"
-                                        onClick={async () => {
-                                            setIsOptimizing(true);
-                                            setOptidialog(null);
-                                            try {
-                                                //  optimization endpoint calling
-                                                const url = config.apiBaseUrl + "/bpmn/optimize/" + encryptedID;
-                                                const token = await refreshAccessToken();
-                                                const response = await axios.post(url, {}, {
-                                                    headers: {
-                                                        Authorization: `Bearer ${token}`,
-                                                    },
-                                                });
-                                                // console.log(response.data);
-                                                onOptimizedXml(response.data.xml_data)
-                                                // console.log(optimizedXml);
+                                Docs
+                            </Button>
+                        </Tooltip>
 
-                                            } catch (error) {
-                                                console.error(error);
-                                            } finally {
-                                                setIsOptimizing(false);
-                                                setOptidialog(null);
-                                            }
-                                        }}
-                                    >
-                                        Optimize Process
-                                    </Button>
-                                </DialogActions>
-                            </Dialog>
+                        {/* Export Dropdown Button */}
+                        <Button
+                            size="small"
+                            variant="text"
+                            onClick={(e) => setAnchorElExport(e.currentTarget)}
+                            startIcon={<FileDownload sx={{ fontSize: 17 }} />}
+                            sx={{
+                                textTransform: 'none',
+                                fontWeight: 500,
+                                fontSize: '0.825rem',
+                                height: 32,
+                                px: 1.25,
+                                color: '#334155',
+                                borderRadius: '6px',
+                                '&:hover': { backgroundColor: '#f1f5f9' }
+                            }}
+                        >
+                            Export
+                        </Button>
 
-                            {/* Loading Backdrop */}
-                            <Backdrop open={isOptimizing} style={{ zIndex: 1300, color: '#fff' }}>
-                                <CircularProgress color="inherit" />
-                            </Backdrop>
-                        </div>
-                        {permissions ?
+                        {/* Share Dialog */}
+                        {permissions && (
                             <ShareDiagram permissions={permissions} />
-                            :
-                            ''
-                        }
+                        )}
 
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }} onMouseLeave={() => setAnchorElExport(null)}>
+                        {/* More Menu */}
+                        <Tooltip title="More Options">
                             <IconButton
                                 size="small"
-                                aria-label="export"
-                                onClick={(e) => setAnchorElExport(e.currentTarget)} // Open the dropdown
-                            >
-                                <FileDownload fontSize="small" />
-                            </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>Export</Typography>
-
-                            {/* Dropdown Menu */}
-                            <Menu
-                                anchorEl={anchorElExport}
-                                open={Boolean(anchorElExport)}
-                                onClose={() => setAnchorElExport(null)}
-                                onMouseLeave={() => setAnchorElExport(null)}
-                            >
-                                <MenuItem onClick={() => handleExport('bpmn')} sx={{ fontSize: '0.8rem' }}>Export as BPMN</MenuItem>
-                                <MenuItem onClick={() => handleExport('xml')} sx={{ fontSize: '0.8rem' }}>Export as XML</MenuItem>
-                                <MenuItem onClick={() => handleExport('png')} sx={{ fontSize: '0.8rem' }}>Export as PNG</MenuItem>
-                                <MenuItem onClick={() => handleExport('jpg')} sx={{ fontSize: '0.8rem' }}>Export as JPG</MenuItem>
-                            </Menu>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }}>
-                            <IconButton
-                                size="small"
-                                aria-controls={open ? 'mui-menu' : undefined}
-                                aria-haspopup="true"
-                                aria-expanded={open ? 'true' : undefined}
-                            // onClick={handleMenuClick}
+                                onClick={handleMenuClick}
+                                sx={{ color: '#64748b', borderRadius: '6px' }}
                             >
                                 <MoreVert fontSize="small" />
                             </IconButton>
-                            <Typography variant="caption" style={{ fontSize: '0.7rem' }}>More</Typography>
-                        </div>
+                        </Tooltip>
                     </div>
+                </Toolbar>
+            </AppBar>
 
-                    <Menu
-                        id="mui-menu"
-                        anchorEl={anchorEl}
-                        open={open}
-                        onClose={handleMenuClose}
-                        slotProps={{
-                            paper: {
-                                style: {
-                                    width: '220px',
-                                    maxWidth: '100%'
-                                }
+            {/* Export Menu Dropdown */}
+            <Menu
+                anchorEl={anchorElExport}
+                open={Boolean(anchorElExport)}
+                onClose={() => setAnchorElExport(null)}
+                slotProps={{
+                    paper: {
+                        elevation: 3,
+                        sx: { minWidth: 160, borderRadius: '8px', mt: 0.5 }
+                    }
+                }}
+            >
+                <MenuItem onClick={() => { handleExport('bpmn'); setAnchorElExport(null); }} sx={{ fontSize: '0.825rem' }}>
+                    Export as BPMN (.bpmn)
+                </MenuItem>
+                <MenuItem onClick={() => { handleExport('xml'); setAnchorElExport(null); }} sx={{ fontSize: '0.825rem' }}>
+                    Export as XML (.xml)
+                </MenuItem>
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem onClick={() => { handleExport('png'); setAnchorElExport(null); }} sx={{ fontSize: '0.825rem' }}>
+                    Export Image (.png)
+                </MenuItem>
+                <MenuItem onClick={() => { handleExport('jpg'); setAnchorElExport(null); }} sx={{ fontSize: '0.825rem' }}>
+                    Export Image (.jpg)
+                </MenuItem>
+            </Menu>
+
+            {/* File & More Menu */}
+            <Menu
+                id="mui-menu"
+                anchorEl={anchorEl}
+                open={open}
+                onClose={handleMenuClose}
+                slotProps={{
+                    paper: {
+                        elevation: 3,
+                        sx: { minWidth: 210, borderRadius: '8px', mt: 0.5 }
+                    }
+                }}
+            >
+                <MenuItem
+                    onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = '.bpmn,.xml';
+                        input.onchange = (e) => {
+                            const file = e.target.files[0];
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                                const content = event.target.result;
+                                onNewDiagram(content);
+                            };
+                            reader.readAsText(file);
+                        };
+                        input.click();
+                        handleMenuClose();
+                    }}
+                    sx={{ fontSize: '0.825rem' }}
+                >
+                    Import Diagram
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        handleMenuClose();
+                        navigate('/bpmn-versions/' + encryptedID);
+                    }}
+                    sx={{ fontSize: '0.825rem' }}
+                >
+                    Version History
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        handleMenuClose();
+                        onPrint();
+                    }}
+                    sx={{ fontSize: '0.825rem' }}
+                >
+                    Print Diagram
+                </MenuItem>
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem
+                    onClick={() => {
+                        handleMenuClose();
+                        handleDeleteDiagram();
+                    }}
+                    sx={{ fontSize: '0.825rem', color: '#dc2626' }}
+                >
+                    Delete Diagram
+                </MenuItem>
+            </Menu>
+
+            {/* Clean Documentation Dialog */}
+            <Dialog
+                open={openDoc}
+                onClose={() => setOpenDoc(false)}
+                maxWidth="md"
+                fullWidth
+                slotProps={{
+                    paper: {
+                        sx: { borderRadius: '12px' }
+                    }
+                }}
+            >
+                <DialogTitle
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        pb: 1,
+                        borderBottom: '1px solid #e2e8f0',
+                        fontSize: '1.05rem',
+                        fontWeight: 600
+                    }}
+                >
+                    <span>Process Workflow Documentation</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Tooltip title="Copy Text">
+                            <IconButton size="small" onClick={handleCopy} disabled={isLoadingDoc}>
+                                <FileCopy fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Export to PDF">
+                            <IconButton size="small" onClick={handleDocumentationExport} disabled={isLoadingDoc}>
+                                <GetApp fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                    </div>
+                </DialogTitle>
+                <DialogContent sx={{ p: 2.5, minHeight: 280 }}>
+                    {isLoadingDoc ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 240, gap: 12 }}>
+                            <CircularProgress size={32} />
+                            <Typography sx={{ fontSize: '0.875rem', color: '#64748b' }}>
+                                Generating workflow documentation...
+                            </Typography>
+                        </div>
+                    ) : (
+                        <TextareaAutosize
+                            value={isEditing ? editedText : documentation}
+                            onChange={(e) => setEditedText(e.target.value)}
+                            style={{
+                                width: '100%',
+                                minHeight: '320px',
+                                padding: '14px',
+                                fontFamily: 'Inter, system-ui, sans-serif',
+                                fontSize: '0.875rem',
+                                lineHeight: '1.6',
+                                color: '#1e293b',
+                                resize: 'vertical',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '8px',
+                                backgroundColor: '#f8fafc',
+                                outline: 'none'
+                            }}
+                            disabled={!isEditing}
+                        />
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ px: 2.5, py: 1.5, borderTop: '1px solid #e2e8f0', justifyContent: 'space-between' }}>
+                    <Button
+                        size="small"
+                        onClick={() => setIsEditing(!isEditing)}
+                        disabled={isLoadingDoc || !documentation}
+                        sx={{ textTransform: 'none', fontSize: '0.825rem' }}
+                    >
+                        {isEditing ? 'Done Editing' : 'Edit Text'}
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setOpenDoc(false)}
+                        sx={{ textTransform: 'none', fontSize: '0.825rem' }}
+                    >
+                        Close
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Optimization Settings Dialog */}
+            <Dialog
+                open={Boolean(optidialog)}
+                onClose={() => setOptidialog(false)}
+                maxWidth="sm"
+                fullWidth
+                slotProps={{ paper: { sx: { borderRadius: '12px' } } }}
+            >
+                <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>Optimize BPMN Workflow</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 2, fontSize: '0.875rem', color: '#475569' }}>
+                        Select an objective to analyze your process model and generate recommendations:
+                    </DialogContentText>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                        {[
+                            { id: 'comprehensive', label: 'Comprehensive Optimization', desc: 'Balances cycle time, simplicity, and structural readability.' },
+                            { id: 'parallel', label: 'Parallelization', desc: 'Converts sequential independent tasks into parallel branches.' },
+                            { id: 'simplify', label: 'Simplification & Pruning', desc: 'Eliminates redundant verification steps and consolidates tasks.' },
+                            { id: 'resilience', label: 'Error-Resilience', desc: 'Adds fallback paths, boundary error events, and safe terminations.' },
+                        ].map((strategy) => (
+                            <div
+                                key={strategy.id}
+                                onClick={() => setOptiGoal(strategy.id)}
+                                style={{
+                                    padding: '12px 16px',
+                                    borderRadius: '8px',
+                                    border: optiGoal === strategy.id ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                                    backgroundColor: optiGoal === strategy.id ? '#eff6ff' : '#ffffff',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease'
+                                }}
+                            >
+                                <div style={{ fontWeight: 600, fontSize: '0.875rem', color: optiGoal === strategy.id ? '#1d4ed8' : '#1e293b' }}>
+                                    {strategy.label}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '3px' }}>
+                                    {strategy.desc}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </DialogContent>
+                <DialogActions sx={{ p: 2, borderTop: '1px solid #e2e8f0' }}>
+                    <Button onClick={() => setOptidialog(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
+                    <Button
+                        variant="contained"
+                        sx={{ textTransform: 'none', backgroundColor: '#2563eb' }}
+                        onClick={async () => {
+                            setIsOptimizing(true);
+                            setOptidialog(false);
+                            try {
+                                const url = config.apiBaseUrl + "/bpmn/optimize/" + encryptedID;
+                                const token = await refreshAccessToken();
+                                const response = await axios.post(
+                                    url,
+                                    { goal: optiGoal },
+                                    {
+                                        headers: {
+                                            Authorization: `Bearer ${token}`,
+                                        },
+                                    }
+                                );
+                                setOptimizationResult(response.data);
+                            } catch (error) {
+                                console.error("Optimization failed:", error);
+                            } finally {
+                                setIsOptimizing(false);
                             }
                         }}
                     >
-                        <MenuItem onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = '.bpmn,.xml';
-                            input.onchange = (e) => {
-                                const file = e.target.files[0];
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                    const content = event.target.result;
-                                    onNewDiagram(content);
-                                };
-                                reader.readAsText(file);
-                            };
-                            input.click();
-                            handleMenuClose();
-                        }}
-                            sx={{ fontSize: '0.8rem' }}
-                        >
-                            Import Diagram
-                        </MenuItem>
+                        Analyze & Optimize
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
-                        <Divider />
-                        <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Make a copy</MenuItem>
-                        <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Share</MenuItem>
-                        <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Email</MenuItem>
-                        <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Export</MenuItem>
-                        <Divider />
-                        {/* <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Rename</MenuItem> */}
-                        <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Move</MenuItem>
-                        {/* <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Delete</MenuItem> */}
-                        <MenuItem onClick={() => {
-                            handleMenuClose();
-                            handleDeleteDiagram();
-                        }} sx={{ fontSize: '0.8rem' }}>Delete</MenuItem>
-                        <Divider />
-                        <MenuItem onClick={() => {
-                            handleMenuClose;
-                            navigate('/bpmn-versions/' + encryptedID);
-                        }} sx={{ fontSize: '0.8rem' }}>Version History</MenuItem>
-                        <MenuItem onClick={handleMenuClose} sx={{ fontSize: '0.8rem' }}>Details</MenuItem>
-                        <Divider />
-                        <MenuItem onClick={() => {
-                            handleMenuClose();
-                            onPrint()
-                        }
-                        } sx={{ fontSize: '0.8rem' }}>Print</MenuItem>
-                    </Menu>
-                </Toolbar>
-            </AppBar>
+            {/* Optimization Results Dialog */}
+            <Dialog
+                open={Boolean(optimizationResult)}
+                onClose={() => setOptimizationResult(null)}
+                maxWidth="md"
+                fullWidth
+                slotProps={{ paper: { sx: { borderRadius: '12px' } } }}
+            >
+                <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                    Proposed Process Optimization
+                </DialogTitle>
+                <DialogContent dividers>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#1e293b' }}>
+                        Summary of Enhancements:
+                    </Typography>
+                    <div
+                        style={{
+                            backgroundColor: '#f8fafc',
+                            padding: '14px',
+                            borderRadius: '8px',
+                            border: '1px solid #e2e8f0',
+                            fontSize: '0.875rem',
+                            lineHeight: '1.6',
+                            whiteSpace: 'pre-line',
+                            color: '#334155',
+                            maxHeight: '260px',
+                            overflowY: 'auto'
+                        }}
+                    >
+                        {optimizationResult?.msg || "Optimized BPMN 2.0 flow generated."}
+                    </div>
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                        Review the suggested improvements above. Clicking <strong>Apply Changes</strong> will update your active canvas with the optimized workflow.
+                    </Alert>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setOptimizationResult(null)} sx={{ textTransform: 'none' }}>
+                        Discard
+                    </Button>
+                    <Button
+                        variant="contained"
+                        sx={{ textTransform: 'none', backgroundColor: '#2563eb' }}
+                        onClick={() => {
+                            if (optimizationResult?.xml_data) {
+                                onOptimizedXml(optimizationResult.xml_data);
+                            }
+                            setOptimizationResult(null);
+                        }}
+                    >
+                        Apply Changes to Canvas
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Loading Backdrop */}
+            <Backdrop open={isOptimizing} style={{ zIndex: 1300, color: '#fff' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                    <CircularProgress color="inherit" />
+                    <Typography sx={{ color: '#fff', fontSize: '0.9rem' }}>Analyzing process model...</Typography>
+                </div>
+            </Backdrop>
+
+            {/* Delete Confirmation Dialog */}
             <Dialog
                 open={openConfirmDialog}
                 onClose={() => setOpenConfirmDialog(false)}
+                slotProps={{ paper: { sx: { borderRadius: '10px' } } }}
             >
-                <DialogTitle>Confirm Delete</DialogTitle>
+                <DialogTitle sx={{ fontWeight: 600 }}>Confirm Delete</DialogTitle>
                 <DialogContent>
-                    <DialogContentText>
+                    <DialogContentText sx={{ fontSize: '0.875rem' }}>
                         Are you sure you want to delete this diagram? This action cannot be undone.
                     </DialogContentText>
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenConfirmDialog(false)}>Cancel</Button>
-                    <Button onClick={handleConfirmDeleteDiagram} color="error" autoFocus>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setOpenConfirmDialog(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
+                    <Button onClick={handleConfirmDeleteDiagram} color="error" variant="contained" autoFocus sx={{ textTransform: 'none' }}>
                         Delete
                     </Button>
                 </DialogActions>

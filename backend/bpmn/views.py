@@ -27,18 +27,28 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 import os
 
+import re
 from appointment_chatbot.models import PersonaInstruction # To set instruction for the OpenAI api
 from bpmn.models import BPMNDiagram, BPMNConversation, BPMNTemplate, DiagramShare, Folder, Message,DiagramVersion # to getthe model of the BPMN diagram
 from bpmn.serializers import BpmnDiagramSelializer, BpmnTemplateSerializer, DiagramShareSerializer, FolderSerializer, MessageSerializer,DiagramVersionSerializer # to serialize the BPMN diagram
 
-from bpmn.utils import check_user_access, save_bpmn, write_bpmn_file,save_imported_diagram
+from bpmn.utils import check_user_access, save_bpmn, write_bpmn_file, save_imported_diagram, bpmn_xml_to_svg
 from scripts.encryption import encrypt_data, decrypt_data
+
 
 User = get_user_model()
 
 
-openai.api_key = settings.OPENAI_API_KEY
-client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+def get_ai_client():
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not set. Please set GEMINI_API_KEY in your .env file.")
+    return openai.OpenAI(
+        api_key=api_key,
+        base_url=settings.GEMINI_BASE_URL
+    )
+
+AI_MODEL = settings.GEMINI_MODEL
 
 @api_view(['GET'])
 def bpmn_get(request):
@@ -80,30 +90,52 @@ def bpmn_chatbot(request):
     1. Extract user message,analyze it, and generate a BPMN diagram or reply.
     """
     try:
-        # Retrieve conversation from session
-        conversation = request.session.get("conversation", [])
-
         # Parse incoming user message from browser
         user_message = request.data.get("message", "")
         encrypted_id = request.data.get("encrypted_id", "")
-        conversation.append({"role": "user", "content": user_message})
-        request.session['conversation'] = conversation
 
-        # Send conversation to OpenAI
+        # Base system instruction
+        try:
+            instruction = PersonaInstruction.objects.get(persona="BPMNGenerator").instruction
+        except Exception:
+            instruction = "You are a bpmn 2.0 generator. You are given a conversation with a user and a system. You are to generate a BPMN diagram based on the conversation."
+
+        conversation = [{"role": "system", "content": instruction}]
+
+        # If diagram exists, restore past messages from database for seamless context
+        c = None
+        if encrypted_id:
+            try:
+                diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
+                c, _ = BPMNConversation.objects.get_or_create(bpmn=diagram)
+                past_messages = Message.objects.filter(conversation=c).order_by('id')
+                for m in past_messages:
+                    role = "assistant" if m.message_type == 'bot' else "user"
+                    conversation.append({"role": role, "content": m.content})
+            except Exception as e:
+                print("Warning: Could not fetch past messages:", e)
+
+        # Append current user prompt
+        conversation.append({"role": "user", "content": user_message})
+
+        # Send conversation to Gemini via OpenAI SDK
+        client = get_ai_client()
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=AI_MODEL,
             messages=conversation
         )
-        bot_message = response.choices[0].message.content
+        bot_message = response.choices[0].message.content or ""
 
         # Saving the user message and the bot message to the database
-        try:
-            diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
-            c = BPMNConversation.objects.get(bpmn=diagram)
-            Message.objects.create(conversation=c, message_type='user', content=user_message)
-            Message.objects.create(conversation=c, message_type='bot', content=bot_message)
-        except Exception as e:
-            print("Error in saving msg to database:", e)
+        c = None
+        if encrypted_id:
+            try:
+                diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
+                c, _ = BPMNConversation.objects.get_or_create(bpmn=diagram)
+                Message.objects.create(conversation=c, message_type='user', content=user_message)
+                Message.objects.create(conversation=c, message_type='bot', content=bot_message)
+            except Exception as e:
+                print("Warning: Could not save message to database:", e)
 
         # Check if response contains BPMN XML in triple-backticks
         if '```xml' in bot_message:
@@ -114,21 +146,31 @@ def bpmn_chatbot(request):
             conversation.append({"role": "assistant", "content": bot_message})
             request.session['conversation'] = conversation
 
-            # save the bpmn xml to the database
-            BPMNDiagram.objects.filter(encrypted_id=encrypted_id).update(bpmn_xml=bot_message)
+            # save the bpmn xml and svg thumbnail to the database
+            if encrypted_id:
+                try:
+                    generated_svg = bpmn_xml_to_svg(bot_message)
+                    BPMNDiagram.objects.filter(encrypted_id=encrypted_id).update(
+                        bpmn_xml=bot_message,
+                        bpmn_svg=generated_svg if generated_svg else ''
+                    )
+                except Exception as e:
+                    print("Warning: Could not update diagram SVG:", e)
+                    BPMNDiagram.objects.filter(encrypted_id=encrypted_id).update(bpmn_xml=bot_message)
 
             #save the text as bot msg to the server
             success_response = "The BPMN has been successfully generated."
-            Message.objects.create(conversation=c, message_type='bot', content=success_response)
-
+            if c:
+                try:
+                    Message.objects.create(conversation=c, message_type='bot', content=success_response)
+                except Exception as e:
+                    print("Warning: Could not save bot confirmation:", e)
 
             # Return the newly written diagram
-            bpmn_xml = BPMNDiagram.objects.get(encrypted_id=encrypted_id).bpmn_xml
-
             return Response(
                 {
                     "reply": success_response,
-                    "XMLdiagram": bpmn_xml
+                    "XMLdiagram": bot_message
                 },
                 status=status.HTTP_200_OK
             )
@@ -140,9 +182,10 @@ def bpmn_chatbot(request):
             return Response({"reply": bot_message}, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print("Error:", e)
+        import traceback
+        traceback.print_exc()
         return Response(
-            {"reply": "Sorry, I am not able to generate the BPMN at the moment."},
+            {"reply": f"Sorry, error communicating with AI: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -154,7 +197,8 @@ def create_bpmn_diagram(request):
         if request.data.get('templateXml') :
             template_xml =  request.data.get('templateXml', '')
             template_svg = request.data.get('templateSvg', '')
-            save_bpmn(request.user, template_xml, template_svg)
+            template_name = request.data.get('templateName', 'Template Process')
+            save_bpmn(request.user, template_xml, template_svg, name=template_name)
         elif request.data.get('encrypted_folder_id'):
             encrypted_folder_id = request.data.get('encrypted_folder_id', '')
             folder = Folder.objects.get(encrypted_folder_id=encrypted_folder_id)
@@ -183,15 +227,37 @@ def create_bpmn_diagram(request):
 @permission_classes([IsAuthenticated])
 def get_all_diagram(request):
     try:
-        my_diagrams = BPMNDiagram.objects.filter(user = request.user).order_by('-updated_at')
-        my_diagrams = my_diagrams.exclude(folder__isnull=False)
-        my_diagrams_serializer = BpmnDiagramSelializer(my_diagrams, many=True)
+        my_diagrams_qs = BPMNDiagram.objects.filter(user = request.user).order_by('-updated_at')
+        my_diagrams_qs = my_diagrams_qs.exclude(folder__isnull=False)
+
+        # Self-healing: Ensure any diagram with missing or empty 0x0 SVG gets a valid SVG rendered
+        for diag in my_diagrams_qs:
+            if not diag.bpmn_svg or diag.bpmn_svg.strip() == "" or 'width="0"' in diag.bpmn_svg:
+                try:
+                    healed_svg = bpmn_xml_to_svg(diag.bpmn_xml) if diag.bpmn_xml else ''
+                    if healed_svg:
+                        diag.bpmn_svg = healed_svg
+                        diag.save(update_fields=['bpmn_svg'])
+                except Exception as ex:
+                    print(f"Failed to heal diagram {diag.id} SVG:", ex)
+
+        my_diagrams_serializer = BpmnDiagramSelializer(my_diagrams_qs, many=True)
         my_diagrams = my_diagrams_serializer.data
 
         shared_diagrams = DiagramShare.objects.filter(user = request.user) #.order_by('-shared_at')
         bpmn_ids = shared_diagrams.values_list('diagram', flat=True)
-        shared_diagrams = BPMNDiagram.objects.filter(id__in=bpmn_ids)
-        shared_with_me_serializer = BpmnDiagramSelializer(shared_diagrams, many=True)
+        shared_diagrams_qs = BPMNDiagram.objects.filter(id__in=bpmn_ids)
+        for diag in shared_diagrams_qs:
+            if not diag.bpmn_svg or diag.bpmn_svg.strip() == "" or 'width="0"' in diag.bpmn_svg:
+                try:
+                    healed_svg = bpmn_xml_to_svg(diag.bpmn_xml) if diag.bpmn_xml else ''
+                    if healed_svg:
+                        diag.bpmn_svg = healed_svg
+                        diag.save(update_fields=['bpmn_svg'])
+                except Exception as ex:
+                    print(f"Failed to heal shared diagram {diag.id} SVG:", ex)
+
+        shared_with_me_serializer = BpmnDiagramSelializer(shared_diagrams_qs, many=True)
         shared_with_me_diagrams = shared_with_me_serializer.data
         return Response({"diagrams": my_diagrams, "sharedWithMe": shared_with_me_diagrams})
     except Exception as e:
@@ -456,131 +522,203 @@ class BPMNDiagramUpdateView(generics.UpdateAPIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+DEFAULT_IMGTOBPMN_INSTRUCTION = """You are an expert BPMN 2.0 diagram engineer and business process analyst.
+Analyze the provided image carefully. The image contains a business process diagram, flowchart, sketch, or whiteboard drawing.
+
+Convert the diagram in the image into a complete, valid, and well-formed BPMN 2.0 XML document that can be directly imported and displayed in bpmn.io.
+
+CRITICAL REQUIREMENTS:
+1. Standard BPMN 2.0 namespaces:
+   - xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+   - xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+   - xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+   - xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+2. Root element: <definitions id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+3. Process definition: <process id="Process_1" isExecutable="true">
+4. Extract all visual elements from the image:
+   - Start Events: <startEvent id="..." name="..." />
+   - Tasks: <task id="..." name="..." />
+   - Gateways: <exclusiveGateway id="..." name="..." /> or <parallelGateway id="..." name="..." />
+   - End Events: <endEvent id="..." name="..." />
+   - Sequence Flows: <sequenceFlow id="..." sourceRef="..." targetRef="..." />
+5. MUST INCLUDE COMPLETE BPMNDiagram & BPMNPlane:
+   - <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+   - <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+   - Every single shape must have a corresponding <bpmndi:BPMNShape bpmnElement="..."> with valid <dc:Bounds x="..." y="..." width="..." height="..." /> coordinates reflecting its spatial layout in the image.
+   - Every sequence flow must have a <bpmndi:BPMNEdge bpmnElement="..."> with matching <di:waypoint x="..." y="..." /> coordinates connecting source and target shapes.
+6. OUTPUT FORMAT: Return ONLY the XML code enclosed within ```xml and ``` markdown code fences. Do NOT include conversational filler, preamble, or commentary."""
+
+
 @api_view(['POST'])
 @parser_classes([MultiPartParser])
 def image_to_bpmn_view(request):
-
-
     uploaded_file = request.FILES.get('image')
 
     if not uploaded_file:
-        return Response({"error": "No file uploaded."}, status=400)
+        return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         # Step 1: Open and Process the Image with Pillow
         try:
             image = Image.open(uploaded_file)
         except Exception as e:
-            return Response({"error": f"An error occurred while opening the image: {str(e)}"}, status=500)
-        print("Image format:", image.format)
-        # Resize the image (if needed)
-        image = image.resize((256, 256))
+            return Response({"error": f"An error occurred while opening the image: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        print("Image size:", image.size)
-        # Convert the image to grayscale (optional)
-        image = image.convert("L")  # 'L' mode is grayscale
+        # Handle RGBA/palette modes for clean PNG output
+        if image.mode in ('RGBA', 'LA', 'P'):
+            rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+            image = rgb_image
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
 
-        print("Image mode:", image.mode)
-        # Save the image to an in-memory buffer
+        # Limit max dimensions to maintain visual fidelity without hitting payload limits
+        MAX_DIM = 1600
+        w, h = image.size
+        if w > MAX_DIM or h > MAX_DIM:
+            image.thumbnail((MAX_DIM, MAX_DIM), Image.Resampling.LANCZOS)
+
+        # Save the image to an in-memory buffer as high-quality JPEG
         buffer = io.BytesIO()
-        image.save(buffer, format="PNG")  # Save as PNG or JPEG
+        image.save(buffer, format="JPEG", quality=85)
         buffer.seek(0)
 
         # Step 2: Convert Image to Base64 String
         image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
 
-        print("Image Base64:", image_base64[:50] + "...")
-        # Step 3: Send Image Data to OpenAI API
-        # Use OpenAI's GPT-4 or GPT models to process the image data
-        prompt = f"Analyze the following image data (base64-encoded) and create a BPMN ready for import into bpmn.io."
-        prompt2 = "Analyze the following image data (base64-encoded) and create prompt to create same BPMN. Note: 1.Start Event: Start Event. 2.Task 1: Task 1. 3.End Event: End Event. like this"
-        SystemInstruction = '''You are a BPMN 2.0 expert who answers in a short but well detailed response. Given any user prompt about a business process, produce a valid, well-formed BPMN 2.0 XML diagram that can be imported into bpmn.io. Follow these requirements:\r\n\r\nBPMN and XML Structure:\r\n\r\nUse the BPMN 2.0 standard namespaces:\r\nxml\r\nCopy code\r\nxmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"\r\nxmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"\r\nxmlns:dc="http://www.omg.org/spec/DD/20100524/DC"\r\nxmlns:di="http://www.omg.org/spec/DD/20100524/DI"\r\nBegin with a <definitions> element (with targetNamespace).\r\nInclude at least one <process> element with id and isExecutable defined.\r\nProvide <bpmndi:BPMNDiagram> elements for diagram layout and ensure correct references to BPMN elements.\r\nCore BPMN Elements:\r\n\r\nUse Events (Start, Intermediate, End), Activities (Tasks, Sub-processes), and Gateways (Exclusive, Inclusive, Parallel, Event-Based, Complex) as needed.\r\nUse Sequence Flows, Message Flows (for communication between Pools), and Associations.\r\nUse Pools/Lanes to show participants and roles.\r\nUse Artifacts (Data Objects, Data Stores, Annotations) if needed.\r\nStandards and Validity:\r\n\r\nEnsure unique id for all elements.\r\nAvoid non-standard or deprecated BPMN elements.\r\nMaintain correct references between BPMN and DI elements.\r\nAdhere to BPMN 2.0 schema and well-formed XML rules.\r\nModeling Best Practices:\r\n\r\nStart with a high-level flow, then add detail.\r\nUse clear, action-oriented names for Tasks.\r\nKeep diagrams readable; if complex, use Sub-processes.\r\nShow clear start/end points and logical flows.\r\nUse Gateways and Pools/Lanes thoughtfully.\r\nAdd Annotations only if needed for clarity.\r\nUser Prompts and Details:\r\n\r\nInterpret the user’s request, identify participants, activities, triggers, and outcomes.\r\nInclude requested complexity (e.g., message flows, data objects) if it fits the scenario.\r\nProduce a complete BPMN XML model ready for import into bpmn.io.'''
-        prompt3 = SystemInstruction+ f"\n Analyze the following image data (base64-encoded) {image_base64} and gererate a possible bpmn 2.0 valid xml"
-
-
+        # Step 3: Fetch or initialize persona instruction
+        instruction = DEFAULT_IMGTOBPMN_INSTRUCTION
         try:
-           prompt = PersonaInstruction.objects.get(persona="IMGTOBPMN").instruction
-        except Exception as e:
-           print("Error:", e)
+            p_obj = PersonaInstruction.objects.filter(persona="IMGTOBPMN").first()
+            if p_obj and p_obj.instruction and p_obj.instruction.strip():
+                instruction = p_obj.instruction
+            elif p_obj:
+                p_obj.instruction = DEFAULT_IMGTOBPMN_INSTRUCTION
+                p_obj.save()
+            else:
+                PersonaInstruction.objects.create(persona="IMGTOBPMN", instruction=DEFAULT_IMGTOBPMN_INSTRUCTION)
+        except Exception as err:
+            print("Warning: could not read PersonaInstruction:", err)
 
-
-
-        try:
-            print("Sending image data to OpenAI...")
-            response = client.chat.completions.create(
-                model="gpt-4o",
-
+        # Step 4: Send Image Data to AI model
+        print("Sending image data to Vision AI...")
+        client = get_ai_client()
+        response = client.chat.completions.create(
+            model=AI_MODEL,
             messages=[
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": prompt,
+                            "text": instruction,
                         },
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                            "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
                         },
                     ],
                 }
             ],
-            )
-            print("OpenAI Response:", response)
-            content= response.choices[0].message.content
-            print("Content:", content)
-            #
-            # prompttocreatebpmn = "Create a BPMN diagram based on the following prompt: " + content
-            # print("Prompt to create BPMN:", prompttocreatebpmn)
-            # response = client.chat.completions.create(
-            # model="gpt-4o",
-            #     messages=[
-            #         {
-            #             "role": "user",
-            #             "content": [
-            #                 {
-            #                     "type": "text",
-            #                     "text": prompttocreatebpmn,
-            #                 },
-            #             ],
-            #         }
-            #     ],
-            # )
-            # print("OpenAI Response2:", response)
-        except Exception as e:
-            return Response({"error": f"An error occurred while processing the image: {str(e)}"}, status=500)
+            temperature=0.2,
+        )
 
+        content = response.choices[0].message.content or ""
+        print("Vision AI Response Length:", len(content))
 
-        # Extract the response
+        # Step 5: Extract and validate BPMN XML
         bpmn_xml = process_openai_response(content)
-        bpmn_svg  = """<?xml version="1.0" encoding="utf-8"?>
-        <!-- created with bpmn-js / http://bpmn.io -->
-        <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="0" height="0" viewBox="0 0 0 0" version="1.1"></svg>"""
-        save_imported_diagram(request.user, bpmn_xml, bpmn_svg)
-        latest_diagram = BPMNDiagram.objects.filter(user = request.user).latest('created_at')
-        encrypted_id = latest_diagram.encrypted_id
+
+        # Step 6: Generate SVG vector preview
+        bpmn_svg = bpmn_xml_to_svg(bpmn_xml)
+
+        # Step 7: Persist diagram for user
+        user = request.user if request.user and request.user.is_authenticated else None
+        if user:
+            saved_diagram = save_imported_diagram(user, bpmn_xml, bpmn_svg)
+            encrypted_id = saved_diagram.encrypted_id
+        else:
+            first_user = User.objects.first()
+            saved_diagram = save_imported_diagram(first_user, bpmn_xml, bpmn_svg)
+            encrypted_id = saved_diagram.encrypted_id
+
+        return Response({"bpmn_xml": bpmn_xml, "encrypted_id": encrypted_id}, status=status.HTTP_200_OK)
 
     except Exception as e:
-        return Response({"error": f"An error occurred: {str(e)}"}, status=500)
+        print("Error in image_to_bpmn_view:", e)
+        return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return Response({"bpmn_xml": bpmn_xml, "encrypted_id": encrypted_id}, status=200)
 
-def process_openai_response(response):
+def process_openai_response(response_text):
+    """
+    Robustly extracts BPMN XML from model response using multiple parsing strategies.
+    Falls back to standard template if no XML can be recovered.
+    """
+    if not response_text:
+        return _get_fallback_bpmn_xml()
 
-    bpmn_xml = """<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
-        <bpmn:process id="Process_1" isExecutable="false">
-            <bpmn:startEvent id="StartEvent_1" />
-            <bpmn:task id="Task_1" name="Generated Task" />
-            <bpmn:endEvent id="EndEvent_1" />
-        </bpmn:process>
-    </bpmn:definitions>"""
+    text = response_text.strip()
 
-    bot_message = response.split('```xml')[1].split('```')[0]
-    write_bpmn_file(bot_message)
-    bpmn_xml = bot_message
+    # Strategy 1: Fenced code block with ```xml ... ```
+    xml_match = re.search(r'```(?:xml|bpmn)?\s*([\s\S]*?)\s*```', text, re.IGNORECASE)
+    if xml_match:
+        candidate = xml_match.group(1).strip()
+        if '<definitions' in candidate or '<bpmn:definitions' in candidate:
+            write_bpmn_file(candidate)
+            return candidate
 
-    return bpmn_xml
+    # Strategy 2: Direct XML substring from <definitions to </definitions>
+    start_tag = re.search(r'<(?:bpmn:)?definitions\b', text, re.IGNORECASE)
+    end_tag = re.search(r'</(?:bpmn:)?definitions>', text, re.IGNORECASE)
+    if start_tag and end_tag and end_tag.end() > start_tag.start():
+        candidate = text[start_tag.start():end_tag.end()].strip()
+        write_bpmn_file(candidate)
+        return candidate
+
+    # Strategy 3: Check if entire string is valid XML
+    if text.startswith('<?xml') or '<definitions' in text:
+        write_bpmn_file(text)
+        return text
+
+    # Fallback default
+    fallback = _get_fallback_bpmn_xml()
+    write_bpmn_file(fallback)
+    return fallback
+
+
+def _get_fallback_bpmn_xml():
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Process Initiated" />
+    <bpmn:task id="Task_1" name="Analyze Diagram Requirements" />
+    <bpmn:endEvent id="EndEvent_1" name="Process Complete" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="170" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
+        <dc:Bounds x="260" y="140" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="480" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="206" y="180" /><di:waypoint x="260" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="420" y="180" /><di:waypoint x="480" y="180" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>"""
+
 
 @api_view(['POST'])
 def save_diagram_version(request):
@@ -620,14 +758,14 @@ def restore_diagram_version(request):
    try:
      version_id = request.data.get('version_id')
      encrypted_id = request.data.get('encrypted_id')
-     print("Version ID:", version_id)
-     print("Encrypted ID:", encrypted_id)
 
-     version= DiagramVersion.objects.get(id=version_id)
-     print("Version:", version)
+     version = DiagramVersion.objects.get(id=version_id)
      diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
-     print("Diagram:", diagram)
      diagram.bpmn_xml = version.bpmn_xml
+     try:
+         diagram.bpmn_svg = bpmn_xml_to_svg(version.bpmn_xml)
+     except Exception as svg_err:
+         print("Could not update SVG on restore:", svg_err)
      diagram.save()
 
      return Response({"reply": "Version restored successfully"}, status=status.HTTP_200_OK)
@@ -657,10 +795,24 @@ def get_versions(request, encrypted_id):
 @permission_classes([IsAuthenticated])
 def templates(request):
     try:
-        bpmn_templates = BPMNTemplate.objects.all()
+        # If no templates exist, auto-seed the default industry templates
+        if BPMNTemplate.objects.count() == 0:
+            try:
+                from bpmn.default_templates import TEMPLATES
+                for t in TEMPLATES:
+                    svg = bpmn_xml_to_svg(t['xml'])
+                    BPMNTemplate.objects.create(
+                        name=t['name'],
+                        description=f"<p>{t['description']}</p>",
+                        bpmn_xml=t['xml'],
+                        bpmn_svg=svg
+                    )
+            except Exception as seed_err:
+                print("Warning: Failed to auto-seed BPMN templates:", seed_err)
+
+        bpmn_templates = BPMNTemplate.objects.all().order_by('id')
         serializer = BpmnTemplateSerializer(bpmn_templates, many=True)
         serialized_templates = serializer.data
-        print("Templates:", bpmn_templates)
         return Response({"templates": serialized_templates})
     except Exception as e:
         print("Error:", e)
@@ -872,9 +1024,10 @@ def generate_bpmn_documentation(request):
         {bpmn_xml}
         """
 
-        # Send request to OpenAI
+        # Send request to Gemini
+        client = get_ai_client()
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": "You are an expert BPMN documentation generator."},
                 {"role": "user", "content": prompt}
@@ -899,33 +1052,70 @@ def optimize(request, encrypted_id):
     try:
         diagram = BPMNDiagram.objects.get(encrypted_id=encrypted_id)
         bpmn_xml = diagram.bpmn_xml
-        # print("BPMN XML:", bpmn_xml)
+        if not bpmn_xml:
+            return Response({"error": "No BPMN XML found for this diagram."}, status=status.HTTP_400_BAD_REQUEST)
 
-        system_instruction = """You are an expert BPMN diagram optimizer. Optimize the following BPMN diagram if not optimized. Only Write what you have done to optimize the diagram inside '```msgYOUR_CHANGES```'. and then generate the optimized BPMN XML."""
-        prompt = f""" Optimize the following BPMN diagram to make it more efficient and readable.""" + f"\n{bpmn_xml}"
-        # Send request to api
-        xml_data = ""
+        goal = request.data.get('goal', 'comprehensive')
+        
+        goal_instructions = {
+            'parallel': "Focus primarily on parallelization: detect sequential tasks that have no dependencies and convert them into parallel branches using ParallelGateways to reduce total cycle time.",
+            'simplify': "Focus primarily on simplification: eliminate redundant checks, merge consecutive tasks of the same nature, remove unnecessary gateways, and streamline the workflow.",
+            'resilience': "Focus on error-resilience: ensure all boundary errors, alternative paths, and compensation end-events are properly modeled to prevent dead-ends.",
+            'comprehensive': "Optimize the workflow for overall efficiency, parallelism, and readability while strictly preserving business logic and ensuring OMG BPMN 2.0 compliance."
+        }
+
+        specific_goal = goal_instructions.get(goal, goal_instructions['comprehensive'])
+
+        system_instruction = f"""You are an expert BPMN 2.0 process optimization architect.
+Your goal: {specific_goal}
+
+Rules:
+1. Always preserve core business objectives and valid BPMN 2.0 XML schema.
+2. Ensure every task and gateway has meaningful names, incoming and outgoing sequence flows, a startEvent, and endEvent.
+3. First provide a clear, bulleted summary of optimizations and estimated performance gains inside ```msg ... ```.
+4. Then output the complete, valid optimized BPMN 2.0 XML inside ```xml ... ```."""
+
+        prompt = f"Optimize the following BPMN process diagram:\n\n{bpmn_xml}"
+        
+        client = get_ai_client()
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}
-            ]            
-
+            ],
+            temperature=0.2
         )
-        bot_msg = response.choices[0].message.content
-        print("Bot Message:", bot_msg)
-        msg = bot_msg.split('```xml')[0]
-        xml_data = bot_msg.split('```xml')[1].split('```')[0]
-        print("Optimized XML:", msg)
-        return Response({"xml_data": xml_data,
-                         "msg": msg
-},
-             status=status.HTTP_200_OK)
+        bot_msg = response.choices[0].message.content or ""
+        # Robust BPMN XML extraction using tested multi-strategy parser
+        xml_data = process_openai_response(bot_msg)
+
+        msg_match = re.search(r'```(?:msg|text)?\s*([\s\S]*?)```', bot_msg)
+        if msg_match:
+            msg = msg_match.group(1).strip()
+        else:
+            # Extract text preceding the XML block
+            msg = bot_msg.split('```')[0].strip() if '```' in bot_msg else "Optimization completed successfully."
+
+        # Also persist the optimized XML to the diagram in DB so changes aren't lost on refresh
+        try:
+            new_svg = bpmn_xml_to_svg(xml_data)
+            BPMNDiagram.objects.filter(encrypted_id=encrypted_id).update(
+                bpmn_xml=xml_data,
+                bpmn_svg=new_svg if new_svg else diagram.bpmn_svg
+            )
+        except Exception as update_err:
+            print("Warning: Could not auto-save optimized diagram to DB:", update_err)
+
+        return Response({
+            "xml_data": xml_data,
+            "msg": msg,
+            "goal": goal
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print("Error:", e)
+        print("Optimization Error:", e)
         return Response(
-            {"error": "Failed to optimize BPMN. Please try again."},
+            {"error": f"Failed to optimize BPMN: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

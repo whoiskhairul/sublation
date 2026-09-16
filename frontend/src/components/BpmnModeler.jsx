@@ -4,7 +4,7 @@ import BpmnModeler from "bpmn-js/lib/Modeler";
 import axios from "axios"; // Import Axios
 import "bpmn-js/dist/assets/diagram-js.css";
 import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import SaveVersionDialog from "./SaveVersion.jsx";
 import Modal from '@mui/material/Modal';
 
@@ -22,8 +22,9 @@ import BpmnToolbar from "./BpmnToolbar";
 import NotificationSnackBar from "./NotificationSnackbar";
 import { handlePrint } from "../utils/handlePrint";
 import './BpmnModeler.css';
-
-
+import 'bpmn-js-bpmnlint/dist/assets/css/bpmn-js-bpmnlint.css';
+import lintModule from 'bpmn-js-bpmnlint';
+import bpmnlintConfig from '../bpmnlint-packed-config.js';
 
 import { refreshAccessToken } from "./auth";
 import saveVersion from "./SaveVersion.jsx";
@@ -36,17 +37,111 @@ const DEFAULT_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
+const BpmnModelerComponent = ({ diagramXml, diagramName, permissions, animatePlacement = false, onAnimationDone }) => {
   const { encryptedID } = useParams();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const actionParam = searchParams.get('action');
+
   const [anchorEl, setAnchorEl] = useState(null);
   const [users, setUsers] = useState([]); // Store the list of users
   const [activeUserList, setActiveUserList] = useState([]);
 
   const containerRef = useRef(null);
   const modelerRef = useRef(null);
+  const animationTimeoutsRef = useRef([]);
 
   const [errorMessages, setErrorMessages] = useState([]);
-  const [showErrors, setShowErrors] = useState(false); // State to toggle visibility
+  const [showErrors, setShowErrors] = useState(actionParam === 'errors'); // Auto-open if action=errors
+  const [openOptimizerAuto, setOpenOptimizerAuto] = useState(actionParam === 'optimize'); // Auto-open if action=optimize
+
+  // Sequence animation helper
+  const runSequentialPlacementAnimation = () => {
+    if (!modelerRef.current) return;
+    const elementRegistry = modelerRef.current.get("elementRegistry");
+    const canvas = modelerRef.current.get("canvas");
+
+    // Clear any previous animation timers
+    animationTimeoutsRef.current.forEach((t) => clearTimeout(t));
+    animationTimeoutsRef.current = [];
+
+    const allElements = elementRegistry.getAll();
+    const rootElement = canvas.getRootElement();
+
+    // Separate into shapes (events, tasks, gateways) and connections (sequence flows)
+    const shapes = [];
+    const connections = [];
+
+    allElements.forEach((el) => {
+      if (el.id === rootElement.id || el.type === "bpmn:Process" || el.type === "label") return;
+      if (el.waypoints) {
+        connections.push(el);
+      } else {
+        shapes.push(el);
+      }
+    });
+
+    // Sort shapes by execution order: Start Events -> Tasks / Gateways -> End Events, sorted left-to-right (x-coord)
+    shapes.sort((a, b) => {
+      const isStartA = a.type?.toLowerCase().includes("startevent");
+      const isStartB = b.type?.toLowerCase().includes("startevent");
+      if (isStartA && !isStartB) return -1;
+      if (!isStartA && isStartB) return 1;
+
+      const isEndA = a.type?.toLowerCase().includes("endevent");
+      const isEndB = b.type?.toLowerCase().includes("endevent");
+      if (isEndA && !isEndB) return 1;
+      if (!isEndA && isEndB) return -1;
+
+      return (a.x || 0) - (b.x || 0);
+    });
+
+    // Hide all elements initially at the SVG node level
+    const orderedElements = [...shapes, ...connections];
+    orderedElements.forEach((el) => {
+      try {
+        canvas.addMarker(el.id, "bpmn-element-hidden");
+        const gfx = canvas.getGraphics(el);
+        if (gfx) {
+          gfx.style.opacity = "0";
+          gfx.style.visibility = "hidden";
+        }
+      } catch (err) {
+        console.error("Error hiding BPMN element:", err);
+      }
+    });
+
+    // Sequentially place each element with staggered delays
+    const STEP_DELAY = 220; // ms per symbol
+    orderedElements.forEach((el, index) => {
+      const timeout = setTimeout(() => {
+        try {
+          canvas.removeMarker(el.id, "bpmn-element-hidden");
+          const gfx = canvas.getGraphics(el);
+          if (gfx) {
+            gfx.style.visibility = "visible";
+            gfx.style.opacity = "1";
+          }
+          const animClass = el.waypoints ? "bpmn-element-flow-placing" : "bpmn-element-placing";
+          canvas.addMarker(el.id, animClass);
+
+          const cleanupTimeout = setTimeout(() => {
+            canvas.removeMarker(el.id, animClass);
+          }, 700);
+          animationTimeoutsRef.current.push(cleanupTimeout);
+        } catch (err) {
+          console.error("Error animating BPMN element:", err);
+        }
+
+        // Once last element appears, notify parent
+        if (index === orderedElements.length - 1 && onAnimationDone) {
+          onAnimationDone();
+        }
+      }, (index + 1) * STEP_DELAY);
+
+      animationTimeoutsRef.current.push(timeout);
+    });
+  };
 
   // STATE FOR START AND END EVENT ERRORS
   const [diagramWarnings, setDiagramWarnings] = useState("");
@@ -66,30 +161,41 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       container: containerRef.current,
       width: "100%",
       height: "100%",
+      linting: {
+        bpmnlint: bpmnlintConfig,
+        active: true,
+      },
+      additionalModules: [
+        lintModule,
+      ],
     });
     // Expose the modeler instance globally
     window.bpmnModeler = modelerRef.current;
 
-    const handleModelerUpdate = async () => {
-      // Handle real-time validation
-      await handleRealTimeValidation();
-
-      // Handle socket update
-      if (!modelerRef.current) return;
-      try {
-        const { xml } = await modelerRef.current.saveXML({ format: true });
-        if (socket.current && socket.current.readyState === WebSocket.OPEN) {
-          socket.current.send(JSON.stringify({ action: 'update_xml', xml, user: userId.current }));
-        }
-      } catch (error) {
-        console.error("Failed to send BPMN XML via WebSocket:", error);
-      }
+    // Listen to bpmnlint results directly inside the client
+    const eventBus = modelerRef.current.get("eventBus");
+    const handleLintComplete = (event) => {
+      const issues = event.issues || {};
+      const formattedErrors = [];
+      Object.keys(issues).forEach((elementId) => {
+        const elementIssues = issues[elementId] || [];
+        elementIssues.forEach((issue) => {
+          formattedErrors.push({
+            elementId: issue.id || elementId,
+            message: issue.message,
+            suggestion: issue.rule ? `Rule: ${issue.rule}` : "Fix BPMN syntax or connection flow.",
+            category: issue.category || 'error'
+          });
+        });
+      });
+      setErrorMessages(formattedErrors);
     };
 
-    modelerRef.current.on("commandStack.changed", handleModelerUpdate);
+    eventBus.on("linting.completed", handleLintComplete);
 
     return () => {
       if (modelerRef.current) {
+        eventBus.off("linting.completed", handleLintComplete);
         modelerRef.current.destroy();
       }
     };
@@ -106,6 +212,15 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
         handleRealTimeValidation(); // Initial 
         showDiagramWarnings(); // Check and show warnings on diagram load
 
+        // Cool sequential symbol-by-symbol placement animation for AI-generated diagrams
+        if (animatePlacement) {
+          try {
+            modelerRef.current.get("canvas").zoom("fit-viewport");
+          } catch (e) {
+            console.warn(e);
+          }
+          runSequentialPlacementAnimation();
+        }
       },
       (err) => {
         console.error("Failed to import BPMN diagram, loading default.", err);
@@ -113,6 +228,14 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
         modelerRef.current.importXML(diagramXml ? diagramXml : DEFAULT_BPMN_XML).then(
           () => {
             console.log("Default BPMN diagram loaded.");
+            if (animatePlacement) {
+              try {
+                modelerRef.current.get("canvas").zoom("fit-viewport");
+              } catch (e) {
+                console.warn(e);
+              }
+              runSequentialPlacementAnimation();
+            }
           },
           (fallbackErr) => {
             console.error("Failed to load default BPMN diagram.", fallbackErr);
@@ -120,7 +243,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
         );
       }
     );
-  }, [diagramXml]);
+  }, [diagramXml, animatePlacement]);
 
   const cleanString = (str) => {
     let cleanedStr = str.replace(/[^a-zA-Z0-9]/g, '');
@@ -133,194 +256,402 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
   const socketRoomId = cleanString(encryptedID);
 
   const socket = useRef(null); // WebSocket reference
-  const [cursors, setCursors] = useState({}); // Store other users' cursor positions
+  const [cursors, setCursors] = useState({}); // Store other users' cursor positions { [user]: { canvasX, canvasY, color, screenX, screenY } }
+  const [peerSelections, setPeerSelections] = useState({}); // Store other users' selected element IDs: { [user]: { elementIds: [], color: '' } }
+  const [userColors, setUserColors] = useState({}); // Map username -> color
+  const isApplyingRemoteXml = useRef(false);
+  const currentViewboxRef = useRef(null);
+
   const colors = [
-    "#FF5733", // Deep Red
-    "#33FF57", // Deep Green
-    "#3357FF", // Deep Blue
-    "#FF33A1", // Deep Pink
-    "#FF8C33", // Deep Orange
-    "#8C33FF", // Deep Purple
-    "#33FFF5", // Deep Cyan
-    "#FF3333", // Deep Crimson
-    "#33FF8C", // Deep Mint
-    "#FF33D4"  // Deep Magenta
+    "#2563EB", // Royal Blue
+    "#10B981", // Emerald
+    "#F59E0B", // Amber
+    "#EC4899", // Pink
+    "#8B5CF6", // Purple
+    "#06B6D4", // Cyan
+    "#EF4444", // Red
+    "#14B8A6", // Teal
+    "#F97316", // Orange
+    "#6366F1"  // Indigo
   ];
 
-  const userColor = useRef(colors[Math.floor(Math.random() * colors.length)]); // Unique color for the user's cursor
+  const userColor = useRef(colors[Math.floor(Math.random() * colors.length)]); // Unique color for current user
 
   const localStorageUser = localStorage.getItem('user');
   const localStorageUserObject = localStorageUser ? JSON.parse(localStorageUser) : null;
   const userId = useRef(localStorageUserObject ? localStorageUserObject.username : `Guest_${Math.floor(Math.random() * 1000)}`);
 
+  // Helper to recompute screen coordinates for all remote cursors whenever local canvas viewbox changes (pan/zoom)
+  const updateScreenCursors = (remoteCursorsMap) => {
+    if (!modelerRef.current) return remoteCursorsMap;
+    try {
+      const canvas = modelerRef.current.get('canvas');
+      const vb = canvas.viewbox();
+      currentViewboxRef.current = vb;
+
+      const updated = {};
+      Object.keys(remoteCursorsMap).forEach((user) => {
+        const item = remoteCursorsMap[user];
+        if (item && item.canvasX !== undefined && item.canvasY !== undefined) {
+          const screenX = (item.canvasX - vb.x) * vb.scale;
+          const screenY = (item.canvasY - vb.y) * vb.scale;
+          updated[user] = {
+            ...item,
+            screenX: Math.round(screenX),
+            screenY: Math.round(screenY),
+          };
+        }
+      });
+      return updated;
+    } catch (e) {
+      return remoteCursorsMap;
+    }
+  };
+
+  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
-    // Initialize WebSocket
-    const socketUrl = config.socketBaseurl + '/ws/bpmn/' + socketRoomId + '/';
-    socket.current = new WebSocket(socketUrl);
+    let reconnectTimeout = null;
+    let pingInterval = null;
+    let isCleanedUp = false;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 10;
 
-    socket.current.onopen = () => {
-      console.log('WebSocket connection opened');
-      // Wait for next tick to ensure connection is ready
-      setTimeout(() => {
-        if (socket.current && socket.current.readyState === WebSocket.OPEN) {
-          // Notify others of the new user
-          socket.current.send(JSON.stringify({ action: 'user_joined', user: userId.current }));
-        }
-      }, 0);
-    };
+    const connectWebSocket = () => {
+      if (isCleanedUp) return;
+      const socketUrl = config.socketBaseurl + '/ws/bpmn/' + socketRoomId + '/';
+      const ws = new WebSocket(socketUrl);
+      socket.current = ws;
 
-    socket.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const commandStack = modelerRef.current?.get('commandStack');
-      const elementRegistry = modelerRef.current?.get('elementRegistry');
+      ws.onopen = () => {
+        console.log('WebSocket connection opened');
+        setWsConnected(true);
+        reconnectAttempts = 0;
 
-      if (data.action === 'update_cursor' && data.user !== userId.current) {
-        // Update cursor position for a user
-        setCursors((prev) => ({
-          ...prev,
-          [data.user]: { x: data.position.x, y: data.position.y, color: data.color },
+        // Announce user presence
+        ws.send(JSON.stringify({
+          action: 'user_joined',
+          user: userId.current,
+          color: userColor.current,
         }));
-      } else if (data.action === 'remove_cursor') {
-        // Remove cursor when a user disconnects
-        setCursors((prev) => {
-          const updatedCursors = { ...prev };
-          delete updatedCursors[data.user];
-          return updatedCursors;
-        });
-      } else if (data.action === 'update_xml' && data.user !== userId.current) {
-        // Handle BPMN diagram updates
-        // console.log(data.user, userId.current);
-        modelerRef.current?.importXML(data.xml).then(
-          () => {
-            console.log("BPMN diagram updated with new XML data.");
-            handleRealTimeValidation(); //real time update 1
 
-
-          },
-          (err) => {
-            console.error("Failed to update BPMN diagram with new XML data.", err);
+        // Keepalive heartbeat ping every 25 seconds
+        if (pingInterval) clearInterval(pingInterval);
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(JSON.stringify({ action: 'ping' }));
+            } catch (e) {
+              console.warn('WebSocket ping failed:', e);
+            }
           }
+        }, 25000);
+      };
 
-        );
-      } else if (data.action === 'update_element') {
-        // Update or add element via commandStack
-        // console.log('update_element:', data);
-        const existingElement = elementRegistry?.get(data.element.id);
-        if (existingElement) {
-          commandStack.execute('element.updateProperties', {
-            element: existingElement,
-            properties: data.element.properties,
+      ws.onmessage = (event) => {
+        let data;
+        try {
+          data = JSON.parse(event.data);
+        } catch (err) {
+          return;
+        }
+
+        if (data.action === 'pong') {
+          // Heartbeat pong received, connection is healthy
+          return;
+        }
+
+        const commandStack = modelerRef.current?.get('commandStack');
+        const elementRegistry = modelerRef.current?.get('elementRegistry');
+        const canvas = modelerRef.current?.get('canvas');
+
+        if (data.action === 'update_cursor' && data.user !== userId.current) {
+          if (data.color) {
+            setUserColors((prev) => ({ ...prev, [data.user]: data.color }));
+          }
+          setCursors((prev) => {
+            let screenX = data.position.x;
+            let screenY = data.position.y;
+            try {
+              if (canvas) {
+                const vb = canvas.viewbox();
+                screenX = (data.position.x - vb.x) * vb.scale;
+                screenY = (data.position.y - vb.y) * vb.scale;
+              }
+            } catch (e) { }
+
+            return {
+              ...prev,
+              [data.user]: {
+                canvasX: data.position.x,
+                canvasY: data.position.y,
+                screenX: Math.round(screenX),
+                screenY: Math.round(screenY),
+                color: data.color,
+              },
+            };
           });
-        } else {
-          const rootElement = modelerRef.current?.get('canvas').getRootElement();
-          commandStack.execute('shape.create', {
-            parent: rootElement,
-            shape: {
-              id: data.element.id,
-              type: data.element.type,
-              x: data.element.position.x,
-              y: data.element.position.y,
-              businessObject: modelerRef.current?.get('moddle').create(data.element.type),
+        } else if (data.action === 'remove_cursor') {
+          setCursors((prev) => {
+            const updatedCursors = { ...prev };
+            delete updatedCursors[data.user];
+            return updatedCursors;
+          });
+        } else if (data.action === 'element_selected' && data.user !== userId.current) {
+          setPeerSelections((prev) => ({
+            ...prev,
+            [data.user]: {
+              elementIds: data.elementIds || [],
+              color: data.color || '#2563EB',
             },
-          });
-        }
-      } else if (data.action === 'remove_element') {
-        // Remove an element via commandStack
-        const elementToRemove = elementRegistry?.get(data.elementId);
-        if (elementToRemove) {
-          commandStack.execute('elements.delete', {
-            elements: [elementToRemove],
-          });
-        }
-      } else if (data.action === 'user_joined' && data.user !== userId.current) {
-        // Add new user to the list
-        setUsers((prev) => {
-          if (!prev.includes(data.user)) {
-            return [...prev, data.user];
+          }));
+
+          if (canvas) {
+            try {
+              (data.elementIds || []).forEach((elId) => {
+                try {
+                  canvas.addMarker(elId, 'peer-selected');
+                  const gfx = canvas.getGraphics(elId);
+                  if (gfx) {
+                    gfx.style.setProperty('--peer-color', data.color || '#2563EB');
+                  }
+                } catch (e) { }
+              });
+            } catch (e) { }
           }
-          return prev;
-        });
-        setNotifMessage(`${data.user} has joined the room.`);
-        setNotifSeverity('info');
-        setOpen(true);
-      } else if (data.action === 'user_left') {
-        // Remove user from the list
-        setUsers((prev) => prev.filter((user) => user !== data.user));
-        setCursors((prev) => {
-          const updatedCursors = { ...prev };
-          delete updatedCursors[data.user];
-          return updatedCursors;
-        });
-        setNotifMessage(`${data.user} has left the room.`);
-        setNotifSeverity('info');
-        setOpen(true);
-      }
+        } else if (data.action === 'element_deselected' && data.user !== userId.current) {
+          if (canvas) {
+            try {
+              (data.elementIds || []).forEach((elId) => {
+                try {
+                  canvas.removeMarker(elId, 'peer-selected');
+                } catch (e) { }
+              });
+            } catch (e) { }
+          }
+          setPeerSelections((prev) => {
+            const updated = { ...prev };
+            delete updated[data.user];
+            return updated;
+          });
+        } else if (data.action === 'update_xml' && data.user !== userId.current) {
+          isApplyingRemoteXml.current = true;
+          modelerRef.current?.importXML(data.xml).then(
+            () => {
+              console.log("BPMN diagram updated with remote collaborator XML.");
+              handleRealTimeValidation();
+              setTimeout(() => {
+                isApplyingRemoteXml.current = false;
+              }, 100);
+            },
+            (err) => {
+              console.error("Failed to update BPMN diagram with new XML data.", err);
+              isApplyingRemoteXml.current = false;
+            }
+          );
+        } else if (data.action === 'update_element') {
+          const existingElement = elementRegistry?.get(data.element.id);
+          if (existingElement) {
+            commandStack.execute('element.updateProperties', {
+              element: existingElement,
+              properties: data.element.properties,
+            });
+          } else {
+            const rootElement = modelerRef.current?.get('canvas').getRootElement();
+            commandStack.execute('shape.create', {
+              parent: rootElement,
+              shape: {
+                id: data.element.id,
+                type: data.element.type,
+                x: data.element.position.x,
+                y: data.element.position.y,
+                businessObject: modelerRef.current?.get('moddle').create(data.element.type),
+              },
+            });
+          }
+        } else if (data.action === 'remove_element') {
+          const elementToRemove = elementRegistry?.get(data.elementId);
+          if (elementToRemove) {
+            commandStack.execute('elements.delete', {
+              elements: [elementToRemove],
+            });
+          }
+        } else if (data.action === 'user_joined' && data.user !== userId.current) {
+          setUsers((prev) => {
+            if (!prev.includes(data.user)) {
+              return [...prev, data.user];
+            }
+            return prev;
+          });
+          if (data.color) {
+            setUserColors((prev) => ({ ...prev, [data.user]: data.color }));
+          }
+          setNotifMessage(`${data.user} has joined the session.`);
+          setNotifSeverity('info');
+          setOpen(true);
+        } else if (data.action === 'user_left') {
+          setUsers((prev) => prev.filter((user) => user !== data.user));
+          setCursors((prev) => {
+            const updatedCursors = { ...prev };
+            delete updatedCursors[data.user];
+            return updatedCursors;
+          });
+          setPeerSelections((prev) => {
+            const userSel = prev[data.user];
+            if (userSel && canvas) {
+              (userSel.elementIds || []).forEach((elId) => {
+                try {
+                  canvas.removeMarker(elId, 'peer-selected');
+                } catch (e) { }
+              });
+            }
+            const updated = { ...prev };
+            delete updated[data.user];
+            return updated;
+          });
+          setNotifMessage(`${data.user} has left the session.`);
+          setNotifSeverity('info');
+          setOpen(true);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.warn('WebSocket error observed:', error);
+      };
+
+      ws.onclose = (event) => {
+        setWsConnected(false);
+        if (pingInterval) clearInterval(pingInterval);
+
+        if (!isCleanedUp) {
+          // Exponential backoff reconnect: 1s, 2s, 4s, up to 10s
+          reconnectAttempts += 1;
+          if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+            const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 10000);
+            console.log(`WebSocket disconnected. Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+            reconnectTimeout = setTimeout(connectWebSocket, delay);
+          } else {
+            console.warn('Max WebSocket reconnect attempts reached.');
+          }
+        }
+      };
     };
 
-    socket.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    socket.current.onclose = (event) => {
-      console.warn('WebSocket closed:', event);
-      // Only attempt to send if the connection is still open
-      if (socket.current && socket.current.readyState === WebSocket.OPEN) {
-        socket.current.send(JSON.stringify({ action: 'user_left', user: userId.current }));
-      }
-    };
+    connectWebSocket();
 
     let lastCursorUpdate = 0;
     const handleMouseMove = (event) => {
       const now = Date.now();
-      if (now - lastCursorUpdate < 200) return; // Throttle: 5 times per second
+      if (now - lastCursorUpdate < 80) return; // Smooth 12 updates/sec throttle
       lastCursorUpdate = now;
 
-      const boundingRect = modelerRef.current._container.getBoundingClientRect();
-      const x = event.clientX - boundingRect.left;
-      const y = event.clientY - boundingRect.top;
+      if (!modelerRef.current) return;
+      const canvas = modelerRef.current.get('canvas');
+      const container = modelerRef.current._container;
+      if (!canvas || !container) return;
 
-      // Broadcast cursor position
-      socket.current.send(
-        JSON.stringify({
-          action: 'update_cursor',
-          user: userId.current,
-          position: { x, y },
-          color: userColor.current,
-        })
-      );
+      const boundingRect = container.getBoundingClientRect();
+      const screenX = event.clientX - boundingRect.left;
+      const screenY = event.clientY - boundingRect.top;
+
+      // Transform screen coordinates into diagram canvas coordinates
+      const vb = canvas.viewbox();
+      const canvasX = vb.x + (screenX / vb.scale);
+      const canvasY = vb.y + (screenY / vb.scale);
+
+      // Broadcast canvas cursor position
+      if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+        socket.current.send(
+          JSON.stringify({
+            action: 'update_cursor',
+            user: userId.current,
+            position: { x: Math.round(canvasX), y: Math.round(canvasY) },
+            color: userColor.current,
+          })
+        );
+      }
     };
 
     const handleModelerChange = async () => {
-      if (!modelerRef.current) return;
+      if (!modelerRef.current || isApplyingRemoteXml.current) return;
       try {
         const { xml } = await modelerRef.current.saveXML({ format: true });
-        socket.current.send(JSON.stringify({ action: 'update_xml', xml, user: userId.current }));
-        modelerRef.current.on("commandStack.changed", handleRealTimeValidation); //real time update 1
+        if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+          socket.current.send(JSON.stringify({ action: 'update_xml', xml, user: userId.current }));
+        }
+        handleRealTimeValidation();
       } catch (error) {
         console.error("Failed to send BPMN XML via WebSocket:", error);
       }
+    };
+
+    // Broadcast element selection footprint
+    let previousSelectedIds = [];
+    const handleSelectionChanged = (event) => {
+      if (!socket.current || socket.current.readyState !== WebSocket.OPEN) return;
+      const newSelected = (event.newSelection || []).map((el) => el.id);
+
+      const deselected = previousSelectedIds.filter((id) => !newSelected.includes(id));
+      if (deselected.length > 0) {
+        socket.current.send(
+          JSON.stringify({
+            action: 'element_deselected',
+            user: userId.current,
+            elementIds: deselected,
+          })
+        );
+      }
+
+      if (newSelected.length > 0) {
+        socket.current.send(
+          JSON.stringify({
+            action: 'element_selected',
+            user: userId.current,
+            elementIds: newSelected,
+            color: userColor.current,
+          })
+        );
+      }
+
+      previousSelectedIds = newSelected;
+    };
+
+    // Recompute screen positions when local viewport pans or zooms
+    const handleViewboxChanged = () => {
+      setCursors((prev) => updateScreenCursors(prev));
     };
 
     const registerModelerEvents = () => {
       if (modelerRef.current) {
         const eventBus = modelerRef.current.get('eventBus');
         eventBus.on('commandStack.changed', handleModelerChange);
-        modelerRef.current._container.addEventListener('mousemove', handleMouseMove); // Track mouse movements
+        eventBus.on('selection.changed', handleSelectionChanged);
+        eventBus.on('canvas.viewbox.changed', handleViewboxChanged);
+        modelerRef.current._container.addEventListener('mousemove', handleMouseMove);
       }
     };
 
     registerModelerEvents();
 
     return () => {
+      isCleanedUp = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (pingInterval) clearInterval(pingInterval);
+
       if (modelerRef.current) {
         const eventBus = modelerRef.current.get('eventBus');
         eventBus.off('commandStack.changed', handleModelerChange);
-        modelerRef.current._container.removeEventListener('mousemove', handleMouseMove);
+        eventBus.off('selection.changed', handleSelectionChanged);
+        eventBus.off('canvas.viewbox.changed', handleViewboxChanged);
+        modelerRef.current._container?.removeEventListener('mousemove', handleMouseMove);
       }
-      if (socket.current && socket.current.readyState === WebSocket.OPEN) {
-        socket.current.send(JSON.stringify({ action: 'user_left', user: userId.current }));
-        socket.current.close();
+      if (socket.current) {
+        if (socket.current.readyState === WebSocket.OPEN) {
+          try {
+            socket.current.send(JSON.stringify({ action: 'user_left', user: userId.current }));
+          } catch (e) { }
+          socket.current.close();
+        }
       }
     };
   }, [socketRoomId]);
@@ -400,7 +731,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
         } catch (error) {
 
           // console.error("Failed to save BPMN XML:", error.response.status);
-          const reply = error.response.data.reply? error.response.data.reply: 'Something went wrong.';
+          const reply = error.response.data.reply ? error.response.data.reply : 'Something went wrong.';
           setNotifMessage(reply);
           setNotifSeverity('error');
           setOpen(true);
@@ -503,87 +834,16 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
     }
   };
 
-  // REAL-TIME VALIDATION FOR START AND END EVENT ERRORS
+  // REAL-TIME VALIDATION VIA BPMNLINT (100% CLIENT-SIDE, 0MS LATENCY)
   const handleRealTimeValidation = async () => {
-    console.log("Real-time validation triggered.");
     if (!modelerRef.current) return;
-
-    const overlays = modelerRef.current.get("overlays");
-    const elementRegistry = modelerRef.current.get("elementRegistry");
-
     try {
-      const { xml } = await modelerRef.current.saveXML({ format: true });
-
-      // Create FormData with the XML for validation
-      const formData = new FormData();
-      const blob = new Blob([xml], { type: "text/xml" });
-      formData.append("file", blob, "diagram.bpmn");
-      const url = config.apiBaseUrl + "/bpmn-error-detection/validate/";
-
-      const response = await axios.post(
-        url,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
-
-      if (response.status === 200) {
-        const errors = response.data.errors || [];
-        setErrorMessages(errors);
-        overlays.clear(); // Clear existing overlays
-
-        // Check for Start and End Event Completeness
-        checkDiagramCompleteness();
-
-        // Add overlays for errors
-        errors.forEach((error) => {
-          const element = elementRegistry.get(error.elementId);
-          if (element) {
-            const errorIcon = document.createElement("img");
-            errorIcon.src = errorIconImg;
-            errorIcon.alt = "Error Icon";
-            errorIcon.style.width = "20px";
-            errorIcon.style.height = "20px";
-            errorIcon.style.cursor = "pointer";
-
-            const tooltip = document.createElement("div");
-            tooltip.style.position = "absolute";
-            tooltip.style.backgroundColor = "rgb(243, 239, 117)";
-            tooltip.style.color = "black";
-            tooltip.style.padding = "10px";
-            tooltip.style.borderRadius = "5px";
-            tooltip.style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
-            tooltip.style.display = "none";
-            tooltip.style.zIndex = "1000";
-            tooltip.innerHTML = `
-              <strong>Error: ${error.message}</strong><br/>
-              <i>Suggestion: ${error.suggestion}</i>
-            `;
-            document.body.appendChild(tooltip);
-
-            errorIcon.addEventListener("mouseenter", (event) => {
-              tooltip.style.display = "block";
-              tooltip.style.top = `${event.pageY + 10}px`;
-              tooltip.style.left = `${event.pageX + 10}px`;
-            });
-
-            errorIcon.addEventListener("mouseleave", () => {
-              tooltip.style.display = "none";
-            });
-
-            overlays.add(element.id, {
-              position: {
-                top: -10,
-                left: 10,
-              },
-              html: errorIcon,
-            });
-          }
-        });
+      const linting = modelerRef.current.get("linting", false);
+      if (linting) {
+        linting.lint();
       }
     } catch (error) {
-      console.error("Error during real-time validation:", error);
+      console.warn("Client linting check:", error);
     }
   };
 
@@ -637,65 +897,64 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
     if (!modelerRef.current) return;
 
     modelerRef.current.saveXML({ format: true }).then(
-        async ({ xml }) => {
-          try {
-            const { svg } = await modelerRef.current.saveSVG({ format: true });
-            const token = await refreshAccessToken()
-            console.log('data:', data);
-            console.log('token:', token);
-            console.log('xml:', xml);
-            console.log('svg:', svg);
-            //
-            // diagram_id = request.data.get('diagram_id')
-            // new_bpmn_xml = request.data.get('bpmn_xml')
-            // version_name = request.data.get('version_name')
+      async ({ xml }) => {
+        try {
+          const { svg } = await modelerRef.current.saveSVG({ format: true });
+          const token = await refreshAccessToken()
+          console.log('data:', data);
+          console.log('token:', token);
+          console.log('xml:', xml);
+          console.log('svg:', svg);
+          //
+          // diagram_id = request.data.get('diagram_id')
+          // new_bpmn_xml = request.data.get('bpmn_xml')
+          // version_name = request.data.get('version_name')
 
-            const formData = new FormData();
-            formData.append("diagram_id", encryptedID);
-            formData.append("bpmn_xml", xml);
-            formData.append("version_name", data);
+          const formData = new FormData();
+          formData.append("diagram_id", encryptedID);
+          formData.append("bpmn_xml", xml);
+          formData.append("version_name", data);
 
-            const url = config.apiBaseUrl + "/bpmn/save-diagram-version/";
-            const response = await axios.post(
-                url,
-                {
-                  diagram_id: encryptedID,
-                  bpmn_xml: xml,
-                  version_name: data,
-                  svg: svg
-                },
-                {
-                  headers: {
-                    "Authorization": `Bearer ${token}`, // Bearer token in headers
-                    "Content-Type": "application/json",
-                  }
-                }
-            );
-
-            if (response.status === 200) {
-              console.log("Response:", response.data);
-              setNotifMessage(`BPMN Diagram saved as ${data}.`);
-              setNotifSeverity('success');
-              setOpen(true);
-            }else
+          const url = config.apiBaseUrl + "/bpmn/save-diagram-version/";
+          const response = await axios.post(
+            url,
             {
-              console.error("Failed to save BPMN XML to the server.");
-              setNotifSeverity('error');
-              setNotifMessage(`Failed to save.`);
-              setOpen(true);
+              diagram_id: encryptedID,
+              bpmn_xml: xml,
+              version_name: data,
+              svg: svg
+            },
+            {
+              headers: {
+                "Authorization": `Bearer ${token}`, // Bearer token in headers
+                "Content-Type": "application/json",
+              }
             }
+          );
 
-          } catch (error) {
-            console.log("Error saving BPMN XML:", error);
+          if (response.status === 200) {
+            console.log("Response:", response.data);
+            setNotifMessage(`BPMN Diagram saved as ${data}.`);
+            setNotifSeverity('success');
+            setOpen(true);
+          } else {
+            console.error("Failed to save BPMN XML to the server.");
             setNotifSeverity('error');
             setNotifMessage(`Failed to save.`);
             setOpen(true);
-
           }
-        },
-        (err) => {
-          console.error("Error saving BPMN XML:", err);
+
+        } catch (error) {
+          console.log("Error saving BPMN XML:", error);
+          setNotifSeverity('error');
+          setNotifMessage(`Failed to save.`);
+          setOpen(true);
+
         }
+      },
+      (err) => {
+        console.error("Error saving BPMN XML:", err);
+      }
     );
   }
 
@@ -740,19 +999,61 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
 
   const [optimizedXml, setOptimizedXml] = useState('');
   useEffect(() => {
-    if (!optimizedXml) return;
+    if (!optimizedXml || !modelerRef.current) return;
+    
+    try {
+      const commandStack = modelerRef.current.get('commandStack');
+      if (commandStack) commandStack.clear();
+    } catch (e) {
+      console.warn("Could not clear commandStack:", e);
+    }
+
     modelerRef.current.importXML(optimizedXml).then(
-        () => {
-          setNotifMessage('Optimized BPMN Diagram has been successfully imported.');
-          setNotifSeverity('success');
-          setOpen(true);
-        },
-        (err) => {
-          console.error("Failed to load optimized BPMN diagram.", err);
-          setNotifMessage('Failed to load optimized BPMN diagram.');
-          setNotifSeverity('error');
-          setOpen(true);
+      async () => {
+        try {
+          const canvas = modelerRef.current.get('canvas');
+          if (canvas) canvas.zoom('fit-viewport');
+        } catch (e) {
+          console.warn("Could not zoom canvas to fit:", e);
         }
+
+        handleRealTimeValidation();
+        showDiagramWarnings();
+
+        setNotifMessage('Optimized BPMN Diagram successfully applied to canvas.');
+        setNotifSeverity('success');
+        setOpen(true);
+
+        // Auto-save the applied optimization (XML + SVG) to the server
+        try {
+          const { svg } = await modelerRef.current.saveSVG({ format: true });
+          const token = await refreshAccessToken();
+          const url = config.apiBaseUrl + "/bpmn/update-diagram/" + encryptedID;
+          await axios.put(
+            url,
+            {
+              bpmn_xml: optimizedXml,
+              bpmn_svg: svg,
+              encrypted_id: encryptedID
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              withCredentials: true,
+            }
+          );
+        } catch (saveErr) {
+          console.warn("Could not auto-save applied optimization:", saveErr);
+        }
+      },
+      (err) => {
+        console.error("Failed to load optimized BPMN diagram.", err);
+        setNotifMessage('Failed to render optimized BPMN diagram. Please verify diagram structure.');
+        setNotifSeverity('error');
+        setOpen(true);
+      }
     );
   }, [optimizedXml]);
 
@@ -761,15 +1062,15 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       <div style={{ position: "relative" }}>
         {/* Toolbar */}
         <Modal open={modelOpen} onClose={handleCloseModal} aria-labelledby="modal-modal-title" aria-describedby="modal-modal-description">
-            {/*<SaveVersionDialog*/}
-            {/*    isOpen={modelOpen}*/}
-            {/*    onClose={handleCloseModal}*/}
-            {/*    onSubmit={handleSaveAS}*/}
-            {/*/>*/}
+          {/*<SaveVersionDialog*/}
+          {/*    isOpen={modelOpen}*/}
+          {/*    onClose={handleCloseModal}*/}
+          {/*    onSubmit={handleSaveAS}*/}
+          {/*/>*/}
           <SaveVersionDialog
-              isOpen={modelOpen}
-              onClose={handleCloseModal}
-              onSubmit={handleSaveAS}
+            isOpen={modelOpen}
+            onClose={handleCloseModal}
+            onSubmit={handleSaveAS}
           />
         </Modal>
 
@@ -789,6 +1090,7 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
           onTimeLineClick={onTimeLineClickHandler}
           onSaveAsClick={showDialogToSaveVersion}
           onOptimizedXml={setOptimizedXml}
+          initialOpenOptimizer={openOptimizerAuto}
         />
         {/* START AND END EVENT ERRORS */}
         {/* {diagramWarnings && (
@@ -817,273 +1119,137 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
           }}
         >
 
-<div
-            className="indicatior-row"
-            style={{
-              display: "flex",
-              flexDirection: "row", // Ensure they are side by side
-              position: "absolute", // Position them relative to the diagram-area
-              top: "10px", // Adjust to be near the top
-              right: "10px", // Adjust to be near the right
-              gap: "10px", // Add spacing between the two indicators
-              zIndex: 1000, // Ensure they appear above other elements
-            }}
-          >
-
-            {/* Error Indicator */}
-            <div
-              style={{
-                backgroundColor: "#ffffff",
-                borderRadius: "50%",
-                width: "40px",
-                height: "40px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                cursor: "pointer",
-              }}
-              onClick={() => {
-                setShowErrors((prev) => !prev); // Toggle error list visibility
-                if (showUsers) setShowUsers(false); // Close user indicator if open
-              }}
-
-            >
-              ⛔{errorMessages.length} {/* Total number of errors */}
-            </div>
-
-      {/* Display error list when toggled */}
-      {showErrors && errorMessages.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            top: "50px", // Position below the error indicator
-            right: "0",
-            backgroundColor: "#ffffff",
-            borderRadius: "8px",
-            padding: "10px",
-            boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-            zIndex: 1000,
-            maxHeight: "200px", // Limit height for long lists
-            overflowY: "auto", // Scroll for long lists
-            transition: "transform 0.3s ease-in-out",
-            width: "300px", // Width of the error list
-
-            /* Scrollbar Styling */
-            scrollbarWidth: "thin", // Modern scrollbar for Firefox
-            scrollbarColor: "#c0c0c0 #f0f0f0", // Thumb and track colors
-
-
-          }}
-          onMouseLeave={()=>{if (showErrors) setShowErrors(false)}} // Hide error list on mouse leave
-
-
-        >
-          <strong
-            style={{
-              display: "block",
-              marginBottom: "10px",
-              fontSize: "1rem",
-              color: "#721c24",
-            }}
-          >
-            Errors ({errorMessages.length}): {/* Total number of errors */}
-          </strong>
-          <ul
-            style={{
-              listStyleType: "none",
-              padding: 0,
-              margin: 0,
-              overflow: "hidden",
-            }}
-          >
-            {errorMessages.map((error, index) => (
-              <li
-                key={index}
+          {/* Combined Top Header: Presence & Error Indicators */}
+          <div className="collab-presence-bar">
+            {/* Error Indicator Button */}
+            <div style={{ position: "relative" }}>
+              <div
+                onClick={() => setShowErrors((prev) => !prev)}
+                title={errorMessages.length > 0 ? `${errorMessages.length} issue(s) detected` : "No issues"}
                 style={{
-                  color: "#721c24",
-                  marginBottom: "10px",
-                  fontSize: "0.875rem",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "5px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "3px 10px",
+                  borderRadius: "16px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  backgroundColor: errorMessages.length > 0 ? "#FEE2E2" : "#F0FDF4",
+                  color: errorMessages.length > 0 ? "#DC2626" : "#16A34A",
+                  border: errorMessages.length > 0 ? "1px solid #FCA5A5" : "1px solid #BBF7D0",
+                  transition: "all 0.2s ease"
                 }}
               >
                 <span
                   style={{
-                    fontSize: "1rem",
-                    color: "#721c24",
-                    fontWeight: "bold",
+                    width: "7px",
+                    height: "7px",
+                    borderRadius: "50%",
+                    backgroundColor: errorMessages.length > 0 ? "#DC2626" : "#16A34A",
+                    display: "inline-block"
                   }}
-                >
-                  ⛔
-                </span>
-                <div>
-                  <strong>Element:</strong> {error.elementId || "Unknown"}
-                  <br />
-                  <strong>Message:</strong> {error.message}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-
-            {/* /* User presence indicator */}
-            <div
-              style={{
-                backgroundColor: "#ffffff",
-                borderRadius: "50%",
-                width: "40px",
-                height: "40px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                cursor: "pointer",
-              }}
-            >
-              <div
-                onClick={() => {
-                  setShowUsers((prev) => !prev); // Toggle user list visibility
-                  if (showErrors) setShowErrors(false); // Close error indicator if open
-                }}
-
-                style={{
-                  backgroundColor: "#ffffff",
-                  borderRadius: "50%",
-                  width: "40px",
-                  height: "40px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                  cursor: "pointer",
-                }}
-              >
-                <strong style={{ color: "#333" }}>👤{users.length}</strong>
+                />
+                <span>{errorMessages.length} {errorMessages.length === 1 ? "Issue" : "Issues"}</span>
               </div>
-              {showUsers && (
+
+              {/* Display error list dropdown */}
+              {showErrors && (
                 <div
                   style={{
                     position: "absolute",
-                    top: "50px",
+                    top: "38px",
                     right: "0",
                     backgroundColor: "#ffffff",
-                    borderRadius: "8px",
-                    padding: "10px",
-                    boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                    zIndex: 1000,
-                    transition: "transform 0.3s ease-in-out",
-
+                    borderRadius: "10px",
+                    padding: "12px",
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                    border: "1px solid #E5E7EB",
+                    zIndex: 1100,
+                    maxHeight: "260px",
+                    overflowY: "auto",
+                    width: "320px",
+                    scrollbarWidth: "thin",
                   }}
-                  onMouseLeave={()=>{if (showUsers) setShowUsers(false)}} // Hide user list on mouse leave
+                  onMouseLeave={() => setShowErrors(false)}
                 >
-                  <strong style={{ display: "block", marginBottom: "5px", color: "#333" }}>
-                    Users:
-                  </strong>
-                  <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
-                    {users.map((user) => (
-                      <li
-                        key={user}
-                        style={{
-                          color: user === userId.current ? "#1976d2" : "#555",
-                          fontWeight: user === userId.current ? "bold" : "normal",
-                          marginBottom: "5px",
-                          display: "flex",
-                          alignItems: "center",
-                        }}
-                      >
-                        <span
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <strong style={{ fontSize: "0.85rem", color: errorMessages.length > 0 ? "#991B1B" : "#065F46" }}>
+                      {errorMessages.length > 0 ? `Issues Detected (${errorMessages.length})` : "Diagram is Valid"}
+                    </strong>
+                    <span
+                      onClick={() => setShowErrors(false)}
+                      style={{ cursor: "pointer", color: "#9CA3AF", fontSize: "14px" }}
+                    >✕</span>
+                  </div>
+                  {errorMessages.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: "0.8rem", color: "#16A34A" }}>No syntax or structural issues found.</p>
+                  ) : (
+                    <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
+                      {errorMessages.map((error, index) => (
+                        <li
+                          key={index}
                           style={{
-                            display: "inline-block",
-                            width: "10px",
-                            height: "10px",
-                            borderRadius: "50%",
-                            backgroundColor: user === userId.current ? "#1976d2" : "#555",
-                            marginRight: "8px",
+                            padding: "6px 8px",
+                            marginBottom: "6px",
+                            borderRadius: "6px",
+                            backgroundColor: "#FEF2F2",
+                            border: "1px solid #FEE2E2",
+                            fontSize: "0.8rem",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
                           }}
-                        ></span>
-                        {user}
-                      </li>
-                    ))}
-                  </ul>
+                        >
+                          <div style={{ color: "#991B1B", fontWeight: 600 }}>
+                            {error.message}
+                          </div>
+                          {error.suggestion && (
+                            <div style={{ color: "#6B7280", fontSize: "0.75rem" }}>
+                              {error.suggestion}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
             </div>
 
-          </div>
-          {/* /* User presence indicator */}
-          {/* <div
-            style={{
-              position: "absolute",
-              top: "10px",
-              right: "10px",
-              zIndex: 1000,
-            }}
-          >
-            <div
-              onClick={() => setShowUsers((prev) => !prev)}
-              style={{
-                backgroundColor: "#ffffff",
-                borderRadius: "50%",
-                width: "40px",
-                height: "40px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                cursor: "pointer",
-              }}
-            >
-              <strong style={{ color: "#333" }}>{users.length}</strong>
+            <div style={{ height: "18px", width: "1px", backgroundColor: "#E2E8F0" }}></div>
+
+            <div className="collab-live-badge" style={{ color: wsConnected ? '#10b981' : '#f59e0b' }}>
+              <span className="collab-live-dot" style={{ backgroundColor: wsConnected ? '#10b981' : '#f59e0b' }}></span>
+              <span>{wsConnected ? 'Live' : 'Connecting...'}</span>
             </div>
-            {showUsers && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "50px",
-                  right: "0",
-                  backgroundColor: "#ffffff",
-                  borderRadius: "8px",
-                  padding: "10px",
-                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                  zIndex: 1000,
-                  transition: "transform 0.3s ease-in-out",
-                }}
-              >
-                <strong style={{ display: "block", marginBottom: "5px", color: "#333" }}>
-                  Users:
-                </strong>
-                <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
-                  {users.map((user) => (
-                    <li
-                      key={user}
-                      style={{
-                        color: user === userId.current ? "#1976d2" : "#555",
-                        fontWeight: user === userId.current ? "bold" : "normal",
-                        marginBottom: "5px",
-                        display: "flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: "inline-block",
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "50%",
-                          backgroundColor: user === userId.current ? "#1976d2" : "#555",
-                          marginRight: "8px",
-                        }}
-                      ></span>
-                      {user}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="collab-avatar-stack">
+              {/* Current user avatar */}
+              <Tooltip title={`${userId.current} (You)`}>
+                <div
+                  className="collab-avatar-circle"
+                  style={{ backgroundColor: userColor.current }}
+                >
+                  {userId.current ? userId.current.charAt(0).toUpperCase() : 'Y'}
+                </div>
+              </Tooltip>
+              {/* Online collaborators avatars */}
+              {users
+                .filter((u) => u !== userId.current)
+                .map((u) => {
+                  const peerColor = userColors[u] || (cursors[u] && cursors[u].color) || '#3B82F6';
+                  return (
+                    <Tooltip key={u} title={`${u} (Collaborating)`}>
+                      <div
+                        className="collab-avatar-circle"
+                        style={{ backgroundColor: peerColor }}
+                      >
+                        {u.charAt(0).toUpperCase()}
+                      </div>
+                    </Tooltip>
+                  );
+                })}
+            </div>
           </div>
 
           {/* Floating buttons container */}
@@ -1124,40 +1290,100 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
             </IconButton>
             {isFullscreen ?
               <IconButton size="small" style={{ padding: '8px' }} onClick={handleFullscreen} >
-                <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>
+                <Tooltip title="Exit Fullscreen">
                   <FullscreenExit style={{ fontSize: '20px' }} />
                 </Tooltip>
               </IconButton> :
               <IconButton size="small" style={{ padding: '8px' }} onClick={handleFullscreen} >
-                <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>
+                <Tooltip title="Enter Fullscreen">
                   <Fullscreen style={{ fontSize: '20px' }} />
                 </Tooltip>
               </IconButton>
-
             }
           </div>
-          {/* Render other users' cursors */}
-          {Object.keys(cursors).map((user) => (
-            <div
-              key={user}
-              style={{
-                position: "absolute",
-                left: `${cursors[user].x}px`,
-                top: `${cursors[user].y}px`,
-                pointerEvents: "none",
-                zIndex: 1000,
-                display: "flex",
-                alignItems: "center"
-              }}
-            >
-              <Tooltip title={localStorage.user}>
-                {/* <NorthWestSharp style={{ color: cursors[user].color, fontSize: '20px' }} /> */}
-                <img src="/arrow-pointer-solid.svg" alt="" style={{width: '15px', height: '15px'}} />
 
-              </Tooltip>
-              <span style={{ marginLeft: '5px', color: cursors[user].color, fontSize: '12px' }}>{user}</span>
-            </div>
-          ))}
+          {/* Render peer selection badges on canvas */}
+          {Object.keys(peerSelections).map((peerUser) => {
+            const selInfo = peerSelections[peerUser];
+            if (!selInfo || !selInfo.elementIds || selInfo.elementIds.length === 0) return null;
+            const peerColor = selInfo.color || '#2563EB';
+
+            // Find first element's position on canvas
+            let badgePos = null;
+            try {
+              if (modelerRef.current) {
+                const elementRegistry = modelerRef.current.get('elementRegistry');
+                const canvas = modelerRef.current.get('canvas');
+                const vb = canvas.viewbox();
+                const firstEl = elementRegistry.get(selInfo.elementIds[0]);
+                if (firstEl) {
+                  badgePos = {
+                    left: Math.round((firstEl.x - vb.x) * vb.scale),
+                    top: Math.round((firstEl.y - 24 - vb.y) * vb.scale),
+                  };
+                }
+              }
+            } catch (e) { }
+
+            if (!badgePos) return null;
+
+            return (
+              <div
+                key={`badge-${peerUser}`}
+                className="peer-element-badge"
+                style={{
+                  left: `${badgePos.left}px`,
+                  top: `${badgePos.top}px`,
+                  backgroundColor: peerColor,
+                }}
+              >
+                <span>✏️ {peerUser}</span>
+              </div>
+            );
+          })}
+
+          {/* Render modern synchronized peer cursors */}
+          {Object.keys(cursors).map((user) => {
+            const cursorData = cursors[user];
+            if (!cursorData || cursorData.screenX === undefined || cursorData.screenY === undefined) return null;
+            const peerColor = cursorData.color || '#2563EB';
+
+            return (
+              <div
+                key={`cursor-${user}`}
+                className="peer-cursor-container"
+                style={{
+                  left: `${cursorData.screenX}px`,
+                  top: `${cursorData.screenY}px`,
+                }}
+              >
+                {/* Crisp dynamic SVG cursor pointer */}
+                <svg
+                  className="peer-cursor-pointer"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  style={{ display: "block" }}
+                >
+                  <path
+                    d="M3 3L10.07 19.97L12.58 13.58L18.97 11.07L3 3Z"
+                    fill={peerColor}
+                    stroke="#ffffff"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                {/* Sleek collaborator name tag */}
+                <span
+                  className="peer-cursor-label"
+                  style={{ backgroundColor: peerColor }}
+                >
+                  {user}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
       <NotificationSnackBar

@@ -6,19 +6,27 @@ const axiosInstance = axios.create({
 });
 
 // Refresh Access Token
-const refreshToken = async () => {
+export const refreshToken = async () => {
   try {
-    const response = await axiosInstance.post(
-      '/authentication/api/token/refresh/'
+    const refresh = localStorage.getItem('refresh');
+    if (!refresh) {
+      throw new Error('No refresh token available');
+    }
+    const response = await axios.post(
+      config.apiBaseUrl + '/authentication/api/token/refresh/',
+      { refresh }
     );
     localStorage.setItem('access', response.data.access);
     return response.data.access;
   } catch (error) {
-    console.error('Refresh token expired. Redirecting to login.');
+    console.error('Refresh token expired. Redirecting to login.', error);
     localStorage.clear();
     window.location.href = '/login';
+    return null;
   }
 };
+
+export const refreshAccessToken = refreshToken;
 
 // Request Interceptor
 axiosInstance.interceptors.request.use(
@@ -42,10 +50,18 @@ axiosInstance.interceptors.request.use(
 const checkTokenExpiry = (token) => {
   if (!token) return true;
 
-  const payload = JSON.parse(atob(token.split('.')[1]));
-  const expiry = payload.exp;
-  const now = Math.floor(Date.now() / 1000);
-  return expiry < now;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return true;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const expiry = payload.exp;
+    if (!expiry) return false;
+    const now = Math.floor(Date.now() / 1000);
+    return expiry < now;
+  } catch (e) {
+    console.error('Error decoding token:', e);
+    return true;
+  }
 };
 
 export default axiosInstance;

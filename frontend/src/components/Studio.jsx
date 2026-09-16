@@ -18,8 +18,6 @@ function Studio() {
     const [messages, setMessages] = useState("");
     const [permissions, setPermissions] = useState("");
 
-    const username = 'John Doe'; // Replace with dynamic username if available
-
     const { encryptedID } = useParams(); // Get encrypted ID from the URL
 
     const url = config.apiBaseUrl + "/bpmn/get-xml/" + encryptedID
@@ -70,8 +68,12 @@ function Studio() {
     }, [url]);
 
 
+    // Track whether the diagram update came from AI chat generation for sequential placement animation
+    const [animatePlacement, setAnimatePlacement] = useState(false);
+
     // This will be called whenever the chat receives a new BPMN XML from the server
     const handleNewDiagram = (newXml) => {
+        setAnimatePlacement(true);
         setDiagramXml(newXml);
     };
 
@@ -91,7 +93,7 @@ function Studio() {
         <div>
             {/* NAVBAR */}
             <div style={{ flex: "0 0 10%", height: "10%" }}>
-                <NavigationBar username={username} />
+                <NavigationBar />
             </div>
 
             {/* MAIN CONTENT AREA */}
@@ -99,9 +101,21 @@ function Studio() {
                 {/* LEFT: BPMN EDITOR */}
                 <div style={{ width: "100%" }}>
                     {permissions && permissions === 'editor' ?
-                        <BpmnModelerComponent diagramXml={diagramXml} diagramName={diagramName} permissions={permissions} />
+                        <BpmnModelerComponent 
+                            diagramXml={diagramXml} 
+                            diagramName={diagramName} 
+                            permissions={permissions} 
+                            animatePlacement={animatePlacement}
+                            onAnimationDone={() => setAnimatePlacement(false)}
+                        />
                         : permissions && permissions === 'viewer' ?
-                            <BpmnViewerComponent diagramXml={diagramXml} diagramName={diagramName} permissions={permissions} />
+                            <BpmnViewerComponent 
+                                diagramXml={diagramXml} 
+                                diagramName={diagramName} 
+                                permissions={permissions} 
+                                animatePlacement={animatePlacement}
+                                onAnimationDone={() => setAnimatePlacement(false)}
+                            />
                             : permissions && permissions === 'restricted' ?
                                 <NotAllowed />
                                 : ''

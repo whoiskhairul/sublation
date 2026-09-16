@@ -25,12 +25,88 @@ const DEFAULT_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-const BpmnViewerComponent = ({ diagramXml, diagramName, permissions }) => {
+const BpmnViewerComponent = ({ diagramXml, diagramName, permissions, animatePlacement = false, onAnimationDone }) => {
   let serverxml = diagramXml;
   console.log('permissions:', permissions);
   const { encryptedID } = useParams();
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
+  const animationTimeoutsRef = useRef([]);
+
+  const runSequentialPlacementAnimation = () => {
+    if (!viewerRef.current) return;
+    const elementRegistry = viewerRef.current.get("elementRegistry");
+    const canvas = viewerRef.current.get("canvas");
+
+    animationTimeoutsRef.current.forEach((t) => clearTimeout(t));
+    animationTimeoutsRef.current = [];
+
+    const allElements = elementRegistry.getAll();
+    const rootElement = canvas.getRootElement();
+
+    const shapes = [];
+    const connections = [];
+
+    allElements.forEach((el) => {
+      if (el.id === rootElement.id || el.type === "bpmn:Process" || el.type === "label") return;
+      if (el.waypoints) {
+        connections.push(el);
+      } else {
+        shapes.push(el);
+      }
+    });
+
+    shapes.sort((a, b) => {
+      const isStartA = a.type?.toLowerCase().includes("startevent");
+      const isStartB = b.type?.toLowerCase().includes("startevent");
+      if (isStartA && !isStartB) return -1;
+      if (!isStartA && isStartB) return 1;
+
+      const isEndA = a.type?.toLowerCase().includes("endevent");
+      const isEndB = b.type?.toLowerCase().includes("endevent");
+      if (isEndA && !isEndB) return 1;
+      if (!isEndA && isEndB) return -1;
+
+      return (a.x || 0) - (b.x || 0);
+    });
+
+    const orderedElements = [...shapes, ...connections];
+    orderedElements.forEach((el) => {
+      try {
+        canvas.addMarker(el.id, "bpmn-element-hidden");
+        const gfx = canvas.getGraphics(el);
+        if (gfx) {
+          gfx.style.opacity = "0";
+          gfx.style.visibility = "hidden";
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    const STEP_DELAY = 220;
+    orderedElements.forEach((el, index) => {
+      const timeout = setTimeout(() => {
+        try {
+          canvas.removeMarker(el.id, "bpmn-element-hidden");
+          const gfx = canvas.getGraphics(el);
+          if (gfx) {
+            gfx.style.visibility = "visible";
+            gfx.style.opacity = "1";
+          }
+          const animClass = el.waypoints ? "bpmn-element-flow-placing" : "bpmn-element-placing";
+          canvas.addMarker(el.id, animClass);
+          setTimeout(() => canvas.removeMarker(el.id, animClass), 700);
+        } catch (err) {
+          console.error(err);
+        }
+        if (index === orderedElements.length - 1 && onAnimationDone) {
+          onAnimationDone();
+        }
+      }, (index + 1) * STEP_DELAY);
+      animationTimeoutsRef.current.push(timeout);
+    });
+  };
 
   useEffect(() => {
     if (!viewerRef.current) {
@@ -57,6 +133,9 @@ const BpmnViewerComponent = ({ diagramXml, diagramName, permissions }) => {
     viewerRef.current.importXML(xmlToLoad).then(
       () => {
         console.log("BPMN diagram successfully imported or updated.");
+        if (animatePlacement) {
+          runSequentialPlacementAnimation();
+        }
       },
       (err) => {
         console.error("Failed to import BPMN diagram, loading default.", err);
@@ -64,6 +143,9 @@ const BpmnViewerComponent = ({ diagramXml, diagramName, permissions }) => {
         viewerRef.current.importXML(diagramXml ? diagramXml : DEFAULT_BPMN_XML).then(
           () => {
             console.log("Default BPMN diagram loaded.");
+            if (animatePlacement) {
+              runSequentialPlacementAnimation();
+            }
           },
           (fallbackErr) => {
             console.error("Failed to load default BPMN diagram.", fallbackErr);
@@ -71,7 +153,7 @@ const BpmnViewerComponent = ({ diagramXml, diagramName, permissions }) => {
         );
       }
     );
-  }, [diagramXml]);
+  }, [diagramXml, animatePlacement]);
 
   
 

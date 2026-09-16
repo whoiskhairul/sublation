@@ -4,79 +4,153 @@ export const handlePrint = async (modelerRef, diagramName) => {
     try {
       const { svg } = await modelerRef.current.saveSVG({ format: true });
       const printWindow = window.open('', 'print-window');
+      const title = diagramName || "Business Process Diagram";
+      const printDate = new Date().toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
       printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
           <head>
-            <title>Diagram Name: ${diagramName}</title>
+            <meta charset="utf-8">
+            <title>${title} - BPMN Print</title>
             <style>
+              @page {
+                size: A4 landscape;
+                margin: 12mm 15mm 12mm 15mm;
+              }
+              * {
+                box-sizing: border-box;
+              }
               body { 
                 margin: 0;
-                padding: 20px;
-                font-family: Arial, sans-serif;
+                padding: 16px 20px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                color: #0f172a;
+                background-color: #ffffff;
                 display: flex;
                 flex-direction: column;
-                align-items: center;
-                min-height: 100vh;
-                justify-content: center;
+                min-height: 98vh;
               }
               .header {
-                width: 100%;
-                text-align: center;
-                margin-bottom: 20px;
-                padding: 10px;
-                border-bottom: 2px solid #4CAF50;
-                position: fixed;
-                top: 0;
-                background: white;
+                display: flex;
+                justifyContent: space-between;
+                align-items: flex-end;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #0f172a;
+                margin-bottom: 16px;
               }
-              .logo {
-                font-size: 32px;
-                color: #4CAF50;
-                font-weight: bold;
+              .title-group {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+              }
+              .title {
+                font-size: 22px;
+                font-weight: 700;
+                color: #0f172a;
+                letter-spacing: -0.02em;
+                margin: 0;
+              }
+              .doc-badge {
+                font-size: 11px;
                 text-transform: uppercase;
-                letter-spacing: 2px;
-                text-align: center;
+                letter-spacing: 1px;
+                color: #2563eb;
+                font-weight: 700;
               }
-              .subtitle {
-                font-size: 16px;
-                color: #666;
-                margin-top: 5px;
-                text-align: center;
+              .meta-group {
+                text-align: right;
+                font-size: 12px;
+                color: #64748b;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+              }
+              .meta-date {
+                font-weight: 500;
+                color: #334155;
               }
               .diagram-container {
-                background-color: white;
-                padding: 10px;
-                width: 100%;
-                margin-top: 100px;
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 16px;
+                min-height: 480px;
               }
-              svg { 
+              .diagram-container svg { 
                 width: 100%;
-                height: auto;
-                max-height: calc(100vh - 200px);
+                height: 100%;
+                max-height: 72vh;
+                object-fit: contain;
+              }
+              .footer {
+                display: flex;
+                justifyContent: space-between;
+                align-items: center;
+                padding-top: 10px;
+                margin-top: 12px;
+                border-top: 1px solid #e2e8f0;
+                font-size: 11px;
+                color: #94a3b8;
+              }
+              .footer-brand {
+                font-weight: 600;
+                color: #64748b;
               }
               @media print {
-                body { padding: 0; }
-                .header { margin-bottom: 10px; padding: 5px; }
-                .diagram-container { padding: 5px; page-break-inside: avoid; }
-                svg { max-height: calc(100vh - 150px); }
+                body {
+                  padding: 0;
+                  min-height: auto;
+                }
+                .diagram-container {
+                  border: none;
+                  padding: 0;
+                  page-break-inside: avoid;
+                }
+                .diagram-container svg {
+                  max-height: 80vh;
+                }
               }
             </style>
           </head>
           <body>
             <div class="header">
-              <div class="logo">Folia</div>
-              <div class="subtitle">By team <b>Sublation</b></div>
+              <div class="title-group">
+                <span class="doc-badge">BPMN 2.0 Process Specification</span>
+                <h1 class="title">${title}</h1>
+              </div>
+              <div class="meta-group">
+                <span class="meta-date">Date: ${printDate}</span>
+                <span>Folia Process Modeler</span>
+              </div>
             </div>
+
             <div class="diagram-container">
               ${svg}
             </div>
+
+            <div class="footer">
+              <span class="footer-brand">Folia Intelligent BPMN Studio</span>
+              <span>Confidential &amp; Proprietary</span>
+            </div>
+
             <script>
               window.onload = function() {
-                window.print();
-                window.onafterprint = function() {
-                  window.close();
-                }
-              }
+                setTimeout(function() {
+                  window.print();
+                  window.onafterprint = function() {
+                    window.close();
+                  };
+                }, 250);
+              };
             </script>
           </body>
         </html>

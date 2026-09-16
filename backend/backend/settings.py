@@ -4,34 +4,33 @@ from dotenv import load_dotenv
 from pathlib import Path
 import dj_database_url
 
+load_dotenv()
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-#_9wf*p)_&$*-&fy5!vr%vqi!h04b*04mv*$14=_gjnavq9gem'
-
-load_dotenv()
-
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', os.getenv('SECRET_KEY', 'django-insecure-#_9wf*p)_&$*-&fy5!vr%vqi!h04b*04mv*$14=_gjnavq9gem'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 't')
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost 127.0.0.1 [::1] *').split()
 
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')  # Fetch from environment variable
-# Application definition
+# AI Configuration (Gemini via OpenAI SDK)
+# Google Gemini provides an OpenAI-compatible endpoint at https://generativelanguage.googleapis.com/v1beta/openai/
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('OPENAI_API_KEY')
+OPENAI_API_KEY = GEMINI_API_KEY
+GEMINI_BASE_URL = os.getenv('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.5-flash')
 
 INSTALLED_APPS = [
-
-    "whitenoise.runserver_nostatic",
-    
-    #for websocket support 
-    'channels',
     'daphne',
+    "whitenoise.runserver_nostatic",
+    'channels',
 
     'django.contrib.admin',
     'django.contrib.auth',
@@ -66,11 +65,11 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # MUST be at the top to handle preflight CORS
     'django.middleware.security.SecurityMiddleware',
     "whitenoise.middleware.WhiteNoiseMiddleware",  # for serving static files
     'allauth.account.middleware.AccountMiddleware', # allauth middleware
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # for enabling CORS headers 
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -102,33 +101,21 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# Database configuration for SQLite
+DB_NAME = os.getenv('DB_NAME', 'folia')
+DB_USER = os.getenv('DB_USER', 'sublation')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'Planspiel')
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = os.getenv('DB_PORT', '5432')
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
+DEFAULT_DATABASE_URL = f"postgres://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# Database configuration for PostgreSQL
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'folia',
-        'USER': 'sublation',
-        'PASSWORD': 'Planspiel',
-
-        # Uncomment the following line while using Docker, comment it out while using local machine
-        # 'HOST': 'db',
-        'PORT': 5432,
-    }
+    'default': dj_database_url.config(
+        default=os.getenv('DATABASE_URL', DEFAULT_DATABASE_URL),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
-
-# Database configuration for Railway hosting
-DATABASE_URL = os.environ.get('DATABASE_URL')
-print(DATABASE_URL)
-DATABASES['default'] = dj_database_url.parse(DATABASE_URL)
 
 
 
@@ -188,16 +175,14 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# OpenAI API Key
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'your-email@gmail.com'
-EMAIL_HOST_PASSWORD = 'your-app-password'  # Use App Password, NOT your email password
-DEFAULT_FROM_EMAIL = 'your-email@gmail.com'
+# Email Configuration
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 't')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
 
 
 # Required for Django-Allauth
@@ -212,8 +197,8 @@ AUTHENTICATION_BACKENDS = [
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'APP': {
-            'client_id': '91636302295-aq54b4197oeblo87d7bum3p700k1e1jb.apps.googleusercontent.com',
-            'secret': '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',
+            'client_id': os.getenv('GOOGLE_CLIENT_ID', ''),
+            'secret': os.getenv('GOOGLE_CLIENT_SECRET', ''),
             'key': ''
         },
         # Optionally define extra parameters (scopes, auth params, etc.)
@@ -237,14 +222,17 @@ REST_FRAMEWORK = {
 # Configuration of Simple JWT tokens
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=730),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=730),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'AUTH_COOKIE': 'refresh_token',  # Name of the cookie
-    'AUTH_COOKIE_SECURE': True,  # Secure in HTTPS
-    'AUTH_COOKIE_HTTP_ONLY': True,  # HTTP-only
-    'AUTH_COOKIE_PATH': '/',  # Cookie available site-wide
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_HTTPONLY': False,
+    'USER_DETAILS_SERIALIZER': 'authentication.serializers.CustomUserDetailsSerializer',
 }
 
 # Allauth Configuration: Enable email as the primary login and other allauth settings
@@ -254,30 +242,32 @@ ACCOUNT_USERNAME_REQUIRED = True
 ACCOUNT_EMAIL_VERIFICATION = 'none'  # we should set it to 'mandatory' if we want email verification
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Logs emails in console
 
-# CORS Configuration
+# CORS & CSRF Configuration
+extra_cors = os.getenv('CORS_ALLOWED_ORIGINS', '').split()
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    'http://localhost:5173',
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:3001",
     "https://folia.sublation.tech",
-
-]
+] + [origin.strip() for origin in extra_cors if origin.strip()]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False').lower() in ('true', '1')
 
-SESSION_COOKIE_SAMESITE = "None"  # Allow cross-site cookies
-SESSION_COOKIE_SECURE = True      # Required for SameSite=None to work
+# Cookie security settings (auto-secure in production)
+SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
+SESSION_COOKIE_SECURE = not DEBUG or os.getenv('SESSION_COOKIE_SECURE', 'False').lower() in ('true', '1')
+CSRF_COOKIE_SECURE = not DEBUG or os.getenv('CSRF_COOKIE_SECURE', 'False').lower() in ('true', '1')
 
-
-
+extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '').split()
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
     "https://folia.sublation.tech",
     "https://pure-celebration-production.up.railway.app",
-    
-]
+] + [origin.strip() for origin in extra_csrf if origin.strip()]
 CORS_ALLOW_HEADERS = [
 'accept',
 'accept-encoding',
@@ -297,18 +287,40 @@ AUTH_USER_MODEL = 'authentication.User'
 #     'USER_DETAILS_SERIALIZER': 'authentication.serializers.CustomUserDetailsSerializer'
 # }
 
-# Redis Configuration 
+# Redis Configuration & Channel Layers
 REDISHOST = os.getenv('REDISHOST', '127.0.0.1')
+USE_REDIS = os.getenv('USE_REDIS', '').lower() in ('true', '1')
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            # "hosts": [("127.0.0.1", 6379)],  # Redis server host
-            "hosts": [(REDISHOST, 6379)],  # Redis server host
-        },
-    },
-}
+REDIS_URL = os.getenv('REDIS_URL')
+
+def get_channel_layers():
+    # If explicitly enabled, in production, or REDIS_URL is provided, use RedisChannelLayer
+    if REDIS_URL:
+        return {
+            "default": {
+                "BACKEND": "channels_redis.core.RedisChannelLayer",
+                "CONFIG": {
+                    "hosts": [REDIS_URL],
+                },
+            },
+        }
+    if USE_REDIS or not DEBUG:
+        return {
+            "default": {
+                "BACKEND": "channels_redis.core.RedisChannelLayer",
+                "CONFIG": {
+                    "hosts": [(REDISHOST, int(os.getenv('REDISPORT', 6379)))],
+                },
+            },
+        }
+    # For local development without a standalone Redis service, use InMemoryChannelLayer
+    return {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
+
+CHANNEL_LAYERS = get_channel_layers()
 WSGI_APPLICATION = 'backend.wsgi.application'
 ASGI_APPLICATION = "backend.asgi.application"
 

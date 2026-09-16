@@ -34,7 +34,7 @@ const SignUpPage = () => {
   
     // Validate username
     const usernameRegex = /^[a-zA-Z0-9_@]+$/; // Letters, numbers, and underscores only
-    if (!usernameRegex.test(formData.name)) {
+    if (!usernameRegex.test(formData.username)) {
       alert('Username can only contain letters, numbers, and underscores!');
       return; // Stop form submission
     }
@@ -53,13 +53,19 @@ const SignUpPage = () => {
       //alert('Registration successful! Please log in.');
       navigate('/login'); // Redirect to login page
     } catch (error) {
-      console.error('Sign-up error:', error.response?.data); // Log error
-  
+      console.error('Sign-up error:', error.response?.data || error.message || error);
+
       // Show backend error messages
       if (error.response?.data?.username) {
         alert('Username error: ' + error.response.data.username[0]);
+      } else if (error.response?.data?.email) {
+        alert('Email error: ' + error.response.data.email[0]);
+      } else if (error.response?.data?.non_field_errors) {
+        alert('Error: ' + error.response.data.non_field_errors[0]);
+      } else if (typeof error.response?.data === 'string') {
+        alert('Server error: ' + error.response.data);
       } else {
-        alert('Sign-up failed. Please check your details and try again.');
+        alert('Sign-up failed: ' + (error.message || 'Please check your details and try again.'));
       }
     }
   };

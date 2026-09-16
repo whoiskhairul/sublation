@@ -140,12 +140,33 @@ export default function ShareSlidesDialog(permissions) {
     };
 
     return (
-        <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 16 }} onClick={() => setOpen(true)}>
-                <IconButton size="small" aria-label="share">
-                    <Share fontSize="small" />
-                </IconButton>
-                <Typography variant="caption" style={{ fontSize: '0.65rem' }}>Share</Typography></div>
+        <>
+            {permissions?.customTrigger ? (
+                permissions.customTrigger(() => setOpen(true))
+            ) : (
+                <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Share fontSize="small" />}
+                    onClick={() => setOpen(true)}
+                    sx={{
+                        textTransform: 'none',
+                        fontSize: '0.8rem',
+                        fontWeight: 500,
+                        color: '#334155',
+                        borderColor: '#cbd5e1',
+                        '&:hover': {
+                            borderColor: '#94a3b8',
+                            backgroundColor: '#f8fafc'
+                        },
+                        height: '34px',
+                        px: 1.5,
+                        borderRadius: '6px'
+                    }}
+                >
+                    Share
+                </Button>
+            )}
 
             <Dialog
                 open={open}
@@ -342,6 +363,6 @@ export default function ShareSlidesDialog(permissions) {
                 severity={notifSeverity}
                 message={notifMessage}
             />
-        </div>
+        </>
     );
 }

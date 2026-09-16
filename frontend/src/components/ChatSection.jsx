@@ -33,115 +33,112 @@ import { useParams } from "react-router-dom";
 import { refreshAccessToken } from "./auth";
 
 const Bubble = styled(Box)(({ theme }) => ({
-  position: "absolute",
-  bottom: "-45px",
-  right: "11px",
-  width: "60px",
-  height: "45px",
-  backgroundColor: "#007ACC",
-  borderRadius: "30px",
+  position: "fixed",
+  bottom: "24px",
+  right: "24px",
+  height: "52px",
+  padding: "0 18px",
+  background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+  borderRadius: "26px",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  color: "white",
+  gap: "8px",
+  color: "#ffffff",
   cursor: "pointer",
-  zIndex: 1000,
-  transition: "transform 0.2s ease-in-out",
+  zIndex: 1100,
+  transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+  boxShadow: "0 10px 25px -5px rgba(37, 99, 235, 0.4), 0 8px 10px -6px rgba(37, 99, 235, 0.2)",
+  userSelect: "none",
   "&:hover": {
-    transform: "scale(1.1)",
+    transform: "translateY(-3px) scale(1.03)",
+    boxShadow: "0 14px 28px -4px rgba(37, 99, 235, 0.5), 0 10px 12px -6px rgba(37, 99, 235, 0.3)",
+    background: "linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%)",
   },
-  boxShadow: "0px 8px 16px rgba(0,0,0,0.3)",
-  overflow: "hidden",
-
-  // Responsive styles
-  [theme.breakpoints.down("sm")]: {
-    width: "50px", // Smaller width for smaller screens
-    height: "40px", // Adjusted height for smaller screens
-    bottom: "-40px", // Adjusted position
-    right: "8px", // Adjusted position
-  },
-  [theme.breakpoints.up("lg")]: {
-    width: "70px", // Larger width for larger screens
-    height: "55px", // Adjusted height for larger screens
-    bottom: "-35px", // Adjusted position
-    right: "15px", // Adjusted position
-  },
+  "&:active": {
+    transform: "translateY(0) scale(0.98)",
+  }
 }));
 
 
 const ChatContainer = styled(Box)(({ theme }) => ({   
-  //padding:"5px",
   position: "fixed",
-  bottom: "5px",
-  right: "20px",
-  width: "80%", // Default to full width on small screens
-  maxWidth: "400px", // Cap the width for larger screens
-  height: "40%", // Dynamic height: half the viewport height
-  maxHeight: "732px", // Cap the height for larger screens
-  backgroundColor: "white",
-  border: "1px solid #ccc",
-  borderRadius: "20px 20px 0 0",
-  boxShadow: "0px 4px 10px rgba(0,0,0,0.3)",
+  bottom: "24px",
+  right: "24px",
+  width: "calc(100vw - 32px)",
+  maxWidth: "410px",
+  height: "580px",
+  maxHeight: "calc(100vh - 100px)",
+  backgroundColor: "#ffffff",
+  borderRadius: "20px",
+  boxShadow: "0 20px 35px -5px rgba(0, 0, 0, 0.15), 0 10px 15px -5px rgba(0, 0, 0, 0.08)",
+  border: "1px solid #E2E8F0",
   display: "flex",
-  marginTop:"3px",
   flexDirection: "column",
-  zIndex: 1000,
-  animation: "fadeIn 0.3s ease",
-  [theme.breakpoints.up("sm")]: {
-    width: "400px", // Set specific width for medium+ screens
-    height: "732px", // Set specific height for medium+ screens
-  },
-
+  zIndex: 1100,
+  overflow: "hidden",
+  animation: "chatSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+  "@keyframes chatSlideUp": {
+    "0%": {
+      opacity: 0,
+      transform: "translateY(18px) scale(0.97)"
+    },
+    "100%": {
+      opacity: 1,
+      transform: "translateY(0) scale(1)"
+    }
+  }
 }));
 
 // The scrollable messages area
 const MessagesContainer = styled(Box)(() => ({
   flex: 1,
   overflowY: "auto",
-  padding: "0.5rem",
+  padding: "16px 14px",
+  backgroundColor: "#F8FAFC",
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
 
-  /* Scrollbar styles for modern browsers */
   "&::-webkit-scrollbar": {
-    width: "8px", // Thin scrollbar
-    height: "8px", // Optional: for horizontal scrollbar
+    width: "6px",
   },
   "&::-webkit-scrollbar-track": {
-    background: "transparent", // Subtle or transparent track
+    background: "transparent",
   },
   "&::-webkit-scrollbar-thumb": {
-    background: "rgba(0, 0, 0, 0.2)", // Light gray thumb
-    borderRadius: "10px", // Rounded corners
+    background: "#CBD5E1",
+    borderRadius: "10px",
   },
   "&::-webkit-scrollbar-thumb:hover": {
-    background: "rgba(0, 0, 0, 0.4)", // Slightly darker thumb on hover
-    
+    background: "#94A3B8",
   },
-
-  /* Firefox-specific styles */
-  scrollbarWidth: "thin", // Thin scrollbar
-  scrollbarColor: "rgba(0, 0, 0, 0.2) transparent", // Thumb and track colors
+  scrollbarWidth: "thin",
+  scrollbarColor: "#CBD5E1 transparent",
 }));
 
 // A single chat "bubble"
 const MessageBubble = styled(Paper)(({ theme, fromuser }) => ({
-  boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-  marginBottom: theme.spacing(1.5),
-  padding: theme.spacing(1),
-  maxWidth: "75%",
+  boxShadow: fromuser
+    ? "0 3px 10px rgba(37, 99, 235, 0.22)"
+    : "0 2px 6px rgba(0, 0, 0, 0.05)",
+  padding: "10px 14px",
+  maxWidth: "80%",
   display: "inline-block",
-  borderRadius: 16,
+  borderRadius: fromuser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+  fontSize: "0.875rem",
+  lineHeight: "1.5",
+  wordBreak: "break-word",
   ...(fromuser
     ? {
-        backgroundColor: "#007ACC",
-        color: "#fff",
-        alignSelf: "flex-end",
-        borderTopRightRadius: 0,
+        background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+        color: "#ffffff",
+        border: "none",
       }
     : {
-        backgroundColor: "#f1f1f1",
-        color: theme.palette.text.primary,
-        alignSelf: "flex-start",
-        borderTopLeftRadius: 0,
+        backgroundColor: "#ffffff",
+        color: "#1E293B",
+        border: "1px solid #E2E8F0",
       }),
 }));
 
@@ -150,36 +147,36 @@ const MessageRow = styled("div")(({ fromuser }) => ({
   display: "flex",
   flexDirection: fromuser ? "row-reverse" : "row",
   alignItems: "flex-end",
-  marginBottom: "8px",
-  padding:"5px",
+  gap: "8px",
+  width: "100%",
 }));
 
 const TopBar = styled(Box)(({ theme }) => ({
-  borderRadius: "20px 20px 0 0",
-  marginBottom:"2px",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: theme.spacing(1),
-  borderBottom: "1px solid #ccc",
-  backgroundColor: "#007ACC", // Updated background color
-  color: theme.palette.primary.contrastText,  // Updated text color for better contrast
-  width: "100%", // Ensures the top bar spans the full width of the container
+  padding: "12px 16px",
+  background: "linear-gradient(135deg, #1E293B 0%, #0F172A 100%)",
+  color: "#ffffff",
+  borderBottom: "1px solid #334155",
 }));
 
 // The message meta info (timestamp, etc.)
-const MessageMeta = styled(Typography)(({ theme }) => ({
-  fontSize: "0.75rem",
-  color: theme.palette.text.secondary,
-  textAlign: "right",
-  marginTop: theme.spacing(0.5),
+const MessageMeta = styled(Typography)(({ fromuser }) => ({
+  fontSize: "0.68rem",
+  color: fromuser ? "rgba(255, 255, 255, 0.75)" : "#94A3B8",
+  marginTop: "4px",
+  textAlign: fromuser ? "right" : "left",
 }));
 
 // The input area (text field + send button)
 const InputContainer = styled(Box)(({ theme }) => ({
   display: "flex",
-  padding: theme.spacing(1),
-  borderTop: "1px solid #ccc",
+  alignItems: "center",
+  padding: "10px 12px",
+  borderTop: "1px solid #E2E8F0",
+  backgroundColor: "#ffffff",
+  gap: "8px",
 }));
 
 const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
@@ -331,8 +328,10 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
       }
     } catch (error) {
       serverResponseText =
-      "Sorry, there was a problem contacting the server.";
-      console.error(error);
+        error.response?.data?.reply ||
+        error.response?.data?.error ||
+        `Error: ${error.message || "Failed to contact server"}`;
+      console.error("Chat request failed:", error.response?.data || error);
     }
 
     // 4. Animate bot response
@@ -380,7 +379,14 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
     <>
       {!isChatOpen && (
         <Bubble onClick={() => setIsChatOpen(true)}>
-          💬
+          <Avatar
+            src={ChatBotIcon}
+            alt="AI Bot"
+            sx={{ width: 28, height: 28, backgroundColor: "transparent" }}
+          />
+          <Typography sx={{ fontWeight: 600, fontSize: "0.875rem", letterSpacing: "0.2px" }}>
+            Assistant
+          </Typography>
         </Bubble>
       )}
       {isChatOpen && (
@@ -388,171 +394,160 @@ const ChatSection = ({ onNewDiagram, conversation, Chatdisabled }) => {
 
         {/* Top Bar */}
         <TopBar>
-  <Box display="flex" alignItems="center">
-    {/* Menu Button */}
-    <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small" sx={{ mr: 1 }}>
-      <MoreVertIcon />
-    </IconButton>
-    
-    {/* Avatar */}
-    <Avatar
-      src={ChatBotIcon} // 
-      alt="Folia Logo"
-      sx={{ width: 30, height: 30, mr: 1 }} // Adjust size and spacing
-    />
+          <Box display="flex" alignItems="center">
+            {/* Menu Button */}
+            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small" sx={{ mr: 0.5, color: "white" }}>
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+            
+            {/* Avatar */}
+            <Avatar
+              src={ChatBotIcon}
+              alt="Folix"
+              sx={{ width: 32, height: 32, mr: 1.2, border: "2px solid rgba(255, 255, 255, 0.2)" }}
+            />
 
-    {/* Title */}
-    <Typography variant="h6" sx={{ fontSize: "1rem", fontWeight: 500 }}>
-      Folix
-    </Typography>
-  </Box>
+            {/* Title */}
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+                Process Assistant
+              </Typography>
+              <Typography variant="caption" sx={{ color: "#94A3B8", fontSize: "0.7rem" }}>
+                BPMN 2.0 Modeling Support
+              </Typography>
+            </Box>
+          </Box>
 
-  {/* Close Button */}
-  <IconButton onClick={() => setIsChatOpen(false)} size="small">
-    <CloseIcon style={{ color: "white" }} />
-  </IconButton>
+          {/* Close Button */}
+          <IconButton onClick={() => setIsChatOpen(false)} size="small" sx={{ color: "#94A3B8", "&:hover": { color: "#FFFFFF" } }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
 
-  {/* Menu for Options */}
-  <Menu
-    anchorEl={anchorEl}
-    open={Boolean(anchorEl)}
-    onClose={() => setAnchorEl(null)}
-  >
-    <MenuItem onClick={() => setOpenConfirmDialog(true)}>Delete Conversation</MenuItem>
-  </Menu>
-</TopBar>
-
-
+          {/* Menu for Options */}
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={() => setAnchorEl(null)}
+          >
+            <MenuItem onClick={() => { setAnchorEl(null); setOpenConfirmDialog(true); }}>Delete Conversation</MenuItem>
+          </Menu>
+        </TopBar>
 
         {/* Messages */}
-      <MessagesContainer>
-        {messages.map((msg) => {
-          const fromuser = msg.author === "user";
-          return (
-            // <MessageRow key={msg.id} fromuser={fromuser}>
-            //   {/* Avatar */}
-            //   <Avatar
-            //     sx={{ margin: "0 8px" }}
-            //     style={fromuser ? { backgroundColor: "#1976d2" } : {}}
-            //   >
-            //     {fromuser ? <PersonIcon /> : <SmartToyIcon />}
-            //   </Avatar>
+        <MessagesContainer>
+          {messages.length === 0 && (
+            <Box sx={{ textAlign: "center", py: 4, px: 2, color: "#64748B" }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#334155" }}>
+                Process Assistant
+              </Typography>
+              <Typography variant="caption" sx={{ display: "block" }}>
+                Describe your workflow to generate or modify diagram elements.
+              </Typography>
+            </Box>
+          )}
 
-            <MessageRow key={msg.id} fromuser={fromuser}>
-              {/* Avatar */}
-              {!fromuser && ( // Only render the avatar for bot messages
-                <Avatar
-                  sx={{ margin: "0 8px" }}
-                  src={ChatBotIcon} // Use the Folia logo for the bot's avatar
-                  alt="Folia Logo"
-                />
-              )}
+          {messages.map((msg, idx) => {
+            const fromuser = msg.author === "user";
+            return (
+              <MessageRow key={idx} fromuser={fromuser}>
+                {!fromuser && (
+                  <Avatar
+                    sx={{ width: 28, height: 28, flexShrink: 0 }}
+                    src={ChatBotIcon}
+                    alt="Folix"
+                  />
+                )}
 
+                <Box sx={{ maxWidth: "80%", display: "flex", flexDirection: "column", alignItems: fromuser ? "flex-end" : "flex-start" }}>
+                  <MessageBubble elevation={0} fromuser={fromuser}>
+                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", fontSize: "0.85rem" }}>
+                      {msg.text}
+                    </Typography>
+                  </MessageBubble>
+                  {msg.timestamp && (
+                    <MessageMeta fromuser={fromuser}>
+                      {msg.timestamp}
+                    </MessageMeta>
+                  )}
+                </Box>
+              </MessageRow>
+            );
+          })}
 
-              {/* Bubble */}
-              <MessageBubble elevation={2} fromuser={fromuser}>
-                <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
-                  {msg.text}
-                </Typography>
-                {/* <MessageMeta>{msg.timestamp}</MessageMeta> */}
-              </MessageBubble>
-            </MessageRow>
-          );
-        })}
-
-        {/* Bot "typing" indicator (optional) */}
-        {botTyping && (
-          <MessageRow fromuser={false} style={{ marginBottom: 16 }}>
-            {/* <Avatar sx={{ margin: "0 8px" }}>
-              <SmartToyIcon />
-            </Avatar> */}
-            <Paper
-              sx={{
-                padding: "8px 16px",
-                borderRadius: 16,
-                maxWidth: "75%",
-                display: "inline-block",
-                backgroundColor: "#f1f1f1",
-                color: "text.primary",
-              }}
-            >
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <CircularProgress size={14} />
-                <Typography variant="body2">
-                  Thinking...
-                </Typography>
-              </Stack>
-            </Paper>
-          </MessageRow>
-        )}
-
-        <div ref={messagesEndRef} />
-      </MessagesContainer>
-
-      {/* Input & Send */}
-  {/* Input & Send */}
-        <InputContainer
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          padding: "8px",
-          border: "1px solid #ccc",   
-          backgroundColor: "#fff",
-          width: "100%",
-         // height: "60px", // FIXED HEIGHT (prevents resizing)
-         maxHeight: "90px", // FIXED HEIGHT (prevents resizing)
-          overflow: "auto", // Ensures no expansion
-        }}
-       
-        >
-    {/* Attachment Button */}
-            {/* <IconButton component="label">
-              <AttachFileIcon />
-              <input
-                type="file"
-                hidden
-                onChange={handleFileUpload} // Logic for processing the uploaded file
+          {/* Bot "typing" indicator */}
+          {botTyping && (
+            <MessageRow fromuser={false}>
+              <Avatar
+                sx={{ width: 28, height: 28, flexShrink: 0 }}
+                src={ChatBotIcon}
+                alt="Folix"
               />
-            </IconButton> */}
-  
-            {/* Message Input */}
-            <TextField
-              variant="outlined"
-              placeholder="Type your message..."
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              size="small"
-              fullWidth
-              multiline // Allows multiple lines
-              height=""
-              inputRef={inputRef} // Add this ref for the input field
-              sx={{
-                "& .MuiInputBase-root": {
-                  //height: "40px", // Keeps text field fixed height
-                  maxHeight: "60px", // Restricts height
-                  display: "flex",
-                  alignItems: "center",
-                },
-                "& textarea": {
-                  overflow: "hidden", // Prevents dynamic growing
-                 // resize: "none", // Blocks manual resizing
-                  maxHeight: "60px", // Restricts height
-                  lineHeight: "20px",
-                },
-              }}
-  
-             
-            />
-  
-            {/* Send Button */}
-            <IconButton
-              color="primary"
-              onClick={handleSendMessage}
-              sx={{ marginLeft: 1 }}
-            >
-              <SendIcon />
-            </IconButton>
+              <Paper
+                elevation={0}
+                sx={{
+                  padding: "8px 14px",
+                  borderRadius: "18px 18px 18px 4px",
+                  backgroundColor: "#FFFFFF",
+                  border: "1px solid #E2E8F0",
+                  color: "#64748B",
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CircularProgress size={12} thickness={5} sx={{ color: "#2563EB" }} />
+                  <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                    Generating diagram...
+                  </Typography>
+                </Stack>
+              </Paper>
+            </MessageRow>
+          )}
+
+          <div ref={messagesEndRef} />
+        </MessagesContainer>
+
+        {/* Input & Send */}
+        <InputContainer>
+          <TextField
+            variant="outlined"
+            placeholder={Chatdisabled ? "Chat is disabled in view mode" : "Ask Folix to edit or create BPMN..."}
+            disabled={Chatdisabled}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            size="small"
+            fullWidth
+            multiline
+            maxRows={3}
+            inputRef={inputRef}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: "14px",
+                backgroundColor: "#F8FAFC",
+                fontSize: "0.85rem",
+                "& fieldset": { borderColor: "#E2E8F0" },
+                "&:hover fieldset": { borderColor: "#CBD5E1" },
+                "&.Mui-focused fieldset": { borderColor: "#2563EB" },
+              },
+            }}
+          />
+
+          <IconButton
+            disabled={Chatdisabled || !inputValue.trim()}
+            onClick={handleSendMessage}
+            sx={{
+              backgroundColor: inputValue.trim() ? "#2563EB" : "#F1F5F9",
+              color: inputValue.trim() ? "#FFFFFF" : "#94A3B8",
+              width: 38,
+              height: 38,
+              flexShrink: 0,
+              borderRadius: "12px",
+              "&:hover": {
+                backgroundColor: inputValue.trim() ? "#1D4ED8" : "#F1F5F9",
+              },
+            }}
+          >
+            <SendIcon sx={{ fontSize: "1.1rem" }} />
+          </IconButton>
         </InputContainer>
 
   <Dialog

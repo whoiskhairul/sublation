@@ -121,26 +121,43 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
   const socketRoomId = cleanString(encryptedID);
 
   const socket = useRef(null); // WebSocket reference
-  const [cursors, setCursors] = useState({}); // Store other users' cursor positions
+  const [cursors, setCursors] = useState({}); // Store other users' cursor positions { [user]: { canvasX, canvasY, color, screenX, screenY } }
+  const [peerSelections, setPeerSelections] = useState({});
+  const [userColors, setUserColors] = useState({});
+  const isApplyingRemoteXml = useRef(false);
+
   const colors = [
-    "#FF5733", // Deep Red
-    "#33FF57", // Deep Green
-    "#3357FF", // Deep Blue
-    "#FF33A1", // Deep Pink
-    "#FF8C33", // Deep Orange
-    "#8C33FF", // Deep Purple
-    "#33FFF5", // Deep Cyan
-    "#FF3333", // Deep Crimson
-    "#33FF8C", // Deep Mint
-    "#FF33D4"  // Deep Magenta
+    "#2563EB", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6",
+    "#06B6D4", "#EF4444", "#14B8A6", "#F97316", "#6366F1"
   ];
 
-  const userColor = useRef(colors[Math.floor(Math.random() * colors.length)]); // Unique color for the user's cursor
+  const userColor = useRef(colors[Math.floor(Math.random() * colors.length)]);
 
   const localStorageUser = localStorage.getItem('user');
   const localStorageUserObject = localStorageUser ? JSON.parse(localStorageUser) : null;
   const userId = useRef(localStorageUserObject ? localStorageUserObject.username : `Guest_${Math.floor(Math.random() * 1000)}`);
 
+  const updateScreenCursors = (remoteCursorsMap) => {
+    if (!modelerRef.current) return remoteCursorsMap;
+    try {
+      const canvas = modelerRef.current.get('canvas');
+      const vb = canvas.viewbox();
+      const updated = {};
+      Object.keys(remoteCursorsMap).forEach((user) => {
+        const item = remoteCursorsMap[user];
+        if (item && item.canvasX !== undefined && item.canvasY !== undefined) {
+          updated[user] = {
+            ...item,
+            screenX: Math.round((item.canvasX - vb.x) * vb.scale),
+            screenY: Math.round((item.canvasY - vb.y) * vb.scale),
+          };
+        }
+      });
+      return updated;
+    } catch (e) {
+      return remoteCursorsMap;
+    }
+  };
 
   useEffect(() => {
     // Initialize WebSocket
@@ -149,46 +166,101 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
 
     socket.current.onopen = () => {
       console.log('WebSocket connection opened');
-      // Notify others of the new user
-      socket.current.send(JSON.stringify({ action: 'user_joined', user: userId.current }));
+      setTimeout(() => {
+        if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+          socket.current.send(JSON.stringify({
+            action: 'user_joined',
+            user: userId.current,
+            color: userColor.current,
+          }));
+        }
+      }, 0);
     };
 
     socket.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       const commandStack = modelerRef.current?.get('commandStack');
       const elementRegistry = modelerRef.current?.get('elementRegistry');
+      const canvas = modelerRef.current?.get('canvas');
 
       if (data.action === 'update_cursor' && data.user !== userId.current) {
-        // Update cursor position for a user
-        setCursors((prev) => ({
-          ...prev,
-          [data.user]: { x: data.position.x, y: data.position.y, color: data.color },
-        }));
+        if (data.color) {
+          setUserColors((prev) => ({ ...prev, [data.user]: data.color }));
+        }
+        setCursors((prev) => {
+          let screenX = data.position.x;
+          let screenY = data.position.y;
+          try {
+            if (canvas) {
+              const vb = canvas.viewbox();
+              screenX = (data.position.x - vb.x) * vb.scale;
+              screenY = (data.position.y - vb.y) * vb.scale;
+            }
+          } catch (e) {}
+
+          return {
+            ...prev,
+            [data.user]: {
+              canvasX: data.position.x,
+              canvasY: data.position.y,
+              screenX: Math.round(screenX),
+              screenY: Math.round(screenY),
+              color: data.color,
+            },
+          };
+        });
       } else if (data.action === 'remove_cursor') {
-        // Remove cursor when a user disconnects
         setCursors((prev) => {
           const updatedCursors = { ...prev };
           delete updatedCursors[data.user];
           return updatedCursors;
         });
+      } else if (data.action === 'element_selected' && data.user !== userId.current) {
+        setPeerSelections((prev) => ({
+          ...prev,
+          [data.user]: {
+            elementIds: data.elementIds || [],
+            color: data.color || '#2563EB',
+          },
+        }));
+        if (canvas) {
+          try {
+            (data.elementIds || []).forEach((elId) => {
+              try {
+                canvas.addMarker(elId, 'peer-selected');
+                const gfx = canvas.getGraphics(elId);
+                if (gfx) gfx.style.setProperty('--peer-color', data.color || '#2563EB');
+              } catch (e) {}
+            });
+          } catch (e) {}
+        }
+      } else if (data.action === 'element_deselected' && data.user !== userId.current) {
+        if (canvas) {
+          try {
+            (data.elementIds || []).forEach((elId) => {
+              try { canvas.removeMarker(elId, 'peer-selected'); } catch (e) {}
+            });
+          } catch (e) {}
+        }
+        setPeerSelections((prev) => {
+          const updated = { ...prev };
+          delete updated[data.user];
+          return updated;
+        });
       } else if (data.action === 'update_xml' && data.user !== userId.current) {
-        // Handle BPMN diagram updates
-        console.log(data.user, userId.current);
+        isApplyingRemoteXml.current = true;
         modelerRef.current?.importXML(data.xml).then(
           () => {
             console.log("BPMN diagram updated with new XML data.");
-            handleRealTimeValidation(); //real time update 1
-
-
+            handleRealTimeValidation();
+            setTimeout(() => { isApplyingRemoteXml.current = false; }, 100);
           },
           (err) => {
             console.error("Failed to update BPMN diagram with new XML data.", err);
+            isApplyingRemoteXml.current = false;
           }
-
         );
       } else if (data.action === 'update_element') {
-        // Update or add element via commandStack
-        console.log('update_element:', data);
         const existingElement = elementRegistry?.get(data.element.id);
         if (existingElement) {
           commandStack.execute('element.updateProperties', {
@@ -209,7 +281,6 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
           });
         }
       } else if (data.action === 'remove_element') {
-        // Remove an element via commandStack
         const elementToRemove = elementRegistry?.get(data.elementId);
         if (elementToRemove) {
           commandStack.execute('elements.delete', {
@@ -217,25 +288,37 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
           });
         }
       } else if (data.action === 'user_joined' && data.user !== userId.current) {
-        // Add new user to the list
         setUsers((prev) => {
           if (!prev.includes(data.user)) {
             return [...prev, data.user];
           }
           return prev;
         });
-        setNotifMessage(`${data.user} has joined the room.`);
+        if (data.color) {
+          setUserColors((prev) => ({ ...prev, [data.user]: data.color }));
+        }
+        setNotifMessage(`${data.user} has joined the session.`);
         setNotifSeverity('info');
         setOpen(true);
       } else if (data.action === 'user_left') {
-        // Remove user from the list
         setUsers((prev) => prev.filter((user) => user !== data.user));
         setCursors((prev) => {
           const updatedCursors = { ...prev };
           delete updatedCursors[data.user];
           return updatedCursors;
         });
-        setNotifMessage(`${data.user} has left the room.`);
+        setPeerSelections((prev) => {
+          const userSel = prev[data.user];
+          if (userSel && canvas) {
+            (userSel.elementIds || []).forEach((elId) => {
+              try { canvas.removeMarker(elId, 'peer-selected'); } catch (e) {}
+            });
+          }
+          const updated = { ...prev };
+          delete updated[data.user];
+          return updated;
+        });
+        setNotifMessage(`${data.user} has left the session.`);
         setNotifSeverity('info');
         setOpen(true);
       }
@@ -247,44 +330,95 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
 
     socket.current.onclose = (event) => {
       console.warn('WebSocket closed:', event);
-      // Only attempt to send if the connection is still open
       if (socket.current && socket.current.readyState === WebSocket.OPEN) {
         socket.current.send(JSON.stringify({ action: 'user_left', user: userId.current }));
       }
     };
 
+    let lastCursorUpdate = 0;
     const handleMouseMove = (event) => {
-      const boundingRect = modelerRef.current._container.getBoundingClientRect();
-      const x = event.clientX - boundingRect.left;
-      const y = event.clientY - boundingRect.top;
+      const now = Date.now();
+      if (now - lastCursorUpdate < 80) return;
+      lastCursorUpdate = now;
 
-      // Broadcast cursor position
-      socket.current.send(
-        JSON.stringify({
-          action: 'update_cursor',
-          user: userId.current,
-          position: { x, y },
-          color: userColor.current,
-        })
-      );
+      if (!modelerRef.current) return;
+      const canvas = modelerRef.current.get('canvas');
+      const container = modelerRef.current._container;
+      if (!canvas || !container) return;
+
+      const boundingRect = container.getBoundingClientRect();
+      const screenX = event.clientX - boundingRect.left;
+      const screenY = event.clientY - boundingRect.top;
+
+      const vb = canvas.viewbox();
+      const canvasX = vb.x + (screenX / vb.scale);
+      const canvasY = vb.y + (screenY / vb.scale);
+
+      if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+        socket.current.send(
+          JSON.stringify({
+            action: 'update_cursor',
+            user: userId.current,
+            position: { x: Math.round(canvasX), y: Math.round(canvasY) },
+            color: userColor.current,
+          })
+        );
+      }
     };
 
     const handleModelerChange = async () => {
-      if (!modelerRef.current) return;
+      if (!modelerRef.current || isApplyingRemoteXml.current) return;
       try {
         const { xml } = await modelerRef.current.saveXML({ format: true });
-        socket.current.send(JSON.stringify({ action: 'update_xml', xml, user: userId.current }));
-        modelerRef.current.on("commandStack.changed", handleRealTimeValidation); //real time update 1
+        if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+          socket.current.send(JSON.stringify({ action: 'update_xml', xml, user: userId.current }));
+        }
       } catch (error) {
         console.error("Failed to send BPMN XML via WebSocket:", error);
       }
+    };
+
+    let previousSelectedIds = [];
+    const handleSelectionChanged = (event) => {
+      if (!socket.current || socket.current.readyState !== WebSocket.OPEN) return;
+      const newSelected = (event.newSelection || []).map((el) => el.id);
+
+      const deselected = previousSelectedIds.filter((id) => !newSelected.includes(id));
+      if (deselected.length > 0) {
+        socket.current.send(
+          JSON.stringify({
+            action: 'element_deselected',
+            user: userId.current,
+            elementIds: deselected,
+          })
+        );
+      }
+
+      if (newSelected.length > 0) {
+        socket.current.send(
+          JSON.stringify({
+            action: 'element_selected',
+            user: userId.current,
+            elementIds: newSelected,
+            color: userColor.current,
+          })
+        );
+      }
+
+      previousSelectedIds = newSelected;
+    };
+
+    const handleViewboxChanged = () => {
+      setCursors((prev) => updateScreenCursors(prev));
     };
 
     const registerModelerEvents = () => {
       if (modelerRef.current) {
         const eventBus = modelerRef.current.get('eventBus');
         eventBus.on('commandStack.changed', handleModelerChange);
-        modelerRef.current._container.addEventListener('mousemove', handleMouseMove); // Track mouse movements
+        eventBus.on('selection.changed', handleSelectionChanged);
+        eventBus.on('canvas.viewbox.changed', handleViewboxChanged);
+        modelerRef.current._container.addEventListener('mousemove', handleMouseMove);
       }
     };
 
@@ -294,7 +428,9 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
       if (modelerRef.current) {
         const eventBus = modelerRef.current.get('eventBus');
         eventBus.off('commandStack.changed', handleModelerChange);
-        modelerRef.current._container.removeEventListener('mousemove', handleMouseMove);
+        eventBus.off('selection.changed', handleSelectionChanged);
+        eventBus.off('canvas.viewbox.changed', handleViewboxChanged);
+        modelerRef.current._container?.removeEventListener('mousemove', handleMouseMove);
       }
       if (socket.current && socket.current.readyState === WebSocket.OPEN) {
         socket.current.send(JSON.stringify({ action: 'user_left', user: userId.current }));
@@ -1064,76 +1200,37 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
             </div>
 
           </div>
-          {/* /* User presence indicator */}
-          {/* <div
-            style={{
-              position: "absolute",
-              top: "10px",
-              right: "10px",
-              zIndex: 1000,
-            }}
-          >
-            <div
-              onClick={() => setShowUsers((prev) => !prev)}
-              style={{
-                backgroundColor: "#ffffff",
-                borderRadius: "50%",
-                width: "40px",
-                height: "40px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                cursor: "pointer",
-              }}
-            >
-              <strong style={{ color: "#333" }}>{users.length}</strong>
+          {/* Modern Real-Time Presence Bar */}
+          <div className="collab-presence-bar">
+            <div className="collab-live-badge">
+              <span className="collab-live-dot"></span>
+              <span>Live</span>
             </div>
-            {showUsers && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "50px",
-                  right: "0",
-                  backgroundColor: "#ffffff",
-                  borderRadius: "8px",
-                  padding: "10px",
-                  boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                  zIndex: 1000,
-                  transition: "transform 0.3s ease-in-out",
-                }}
-              >
-                <strong style={{ display: "block", marginBottom: "5px", color: "#333" }}>
-                  Users:
-                </strong>
-                <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
-                  {users.map((user) => (
-                    <li
-                      key={user}
-                      style={{
-                        color: user === userId.current ? "#1976d2" : "#555",
-                        fontWeight: user === userId.current ? "bold" : "normal",
-                        marginBottom: "5px",
-                        display: "flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: "inline-block",
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "50%",
-                          backgroundColor: user === userId.current ? "#1976d2" : "#555",
-                          marginRight: "8px",
-                        }}
-                      ></span>
-                      {user}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="collab-avatar-stack">
+              <Tooltip title={`${userId.current} (You)`}>
+                <div
+                  className="collab-avatar-circle"
+                  style={{ backgroundColor: userColor.current }}
+                >
+                  {userId.current ? userId.current.charAt(0).toUpperCase() : 'Y'}
+                </div>
+              </Tooltip>
+              {users
+                .filter((u) => u !== userId.current)
+                .map((u) => {
+                  const peerColor = userColors[u] || (cursors[u] && cursors[u].color) || '#3B82F6';
+                  return (
+                    <Tooltip key={u} title={`${u} (Collaborating)`}>
+                      <div
+                        className="collab-avatar-circle"
+                        style={{ backgroundColor: peerColor }}
+                      >
+                        {u.charAt(0).toUpperCase()}
+                      </div>
+                    </Tooltip>
+                  );
+                })}
+            </div>
           </div>
 
           {/* Floating buttons container */}
@@ -1174,38 +1271,97 @@ const BpmnModelerComponent = ({ diagramXml, diagramName, permissions }) => {
             </IconButton>
             {isFullscreen ?
               <IconButton size="small" style={{ padding: '8px' }} onClick={handleFullscreen} >
-                <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>
+                <Tooltip title="Exit Fullscreen">
                   <FullscreenExit style={{ fontSize: '20px' }} />
                 </Tooltip>
               </IconButton> :
               <IconButton size="small" style={{ padding: '8px' }} onClick={handleFullscreen} >
-                <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>
+                <Tooltip title="Enter Fullscreen">
                   <Fullscreen style={{ fontSize: '20px' }} />
                 </Tooltip>
               </IconButton>
-
             }
           </div>
-          {/* Render other users' cursors */}
-          {Object.keys(cursors).map((user) => (
-            <div
-              key={user}
-              style={{
-                position: "absolute",
-                left: `${cursors[user].x}px`,
-                top: `${cursors[user].y}px`,
-                pointerEvents: "none",
-                zIndex: 1000,
-                display: "flex",
-                alignItems: "center"
-              }}
-            >
-              <Tooltip title={localStorage.user}>
-                <NorthWestSharp style={{ color: cursors[user].color, fontSize: '20px' }} />
-              </Tooltip>
-              <span style={{ marginLeft: '5px', color: cursors[user].color, fontSize: '12px' }}>{user}</span>
-            </div>
-          ))}
+
+          {/* Render peer selection badges on canvas */}
+          {Object.keys(peerSelections).map((peerUser) => {
+            const selInfo = peerSelections[peerUser];
+            if (!selInfo || !selInfo.elementIds || selInfo.elementIds.length === 0) return null;
+            const peerColor = selInfo.color || '#2563EB';
+
+            let badgePos = null;
+            try {
+              if (modelerRef.current) {
+                const elementRegistry = modelerRef.current.get('elementRegistry');
+                const canvas = modelerRef.current.get('canvas');
+                const vb = canvas.viewbox();
+                const firstEl = elementRegistry.get(selInfo.elementIds[0]);
+                if (firstEl) {
+                  badgePos = {
+                    left: Math.round((firstEl.x - vb.x) * vb.scale),
+                    top: Math.round((firstEl.y - 24 - vb.y) * vb.scale),
+                  };
+                }
+              }
+            } catch (e) {}
+
+            if (!badgePos) return null;
+
+            return (
+              <div
+                key={`badge-${peerUser}`}
+                className="peer-element-badge"
+                style={{
+                  left: `${badgePos.left}px`,
+                  top: `${badgePos.top}px`,
+                  backgroundColor: peerColor,
+                }}
+              >
+                <span>✏️ {peerUser}</span>
+              </div>
+            );
+          })}
+
+          {/* Render modern synchronized peer cursors */}
+          {Object.keys(cursors).map((user) => {
+            const cursorData = cursors[user];
+            if (!cursorData || cursorData.screenX === undefined || cursorData.screenY === undefined) return null;
+            const peerColor = cursorData.color || '#2563EB';
+
+            return (
+              <div
+                key={`cursor-${user}`}
+                className="peer-cursor-container"
+                style={{
+                  left: `${cursorData.screenX}px`,
+                  top: `${cursorData.screenY}px`,
+                }}
+              >
+                <svg
+                  className="peer-cursor-pointer"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  style={{ display: "block" }}
+                >
+                  <path
+                    d="M3 3L10.07 19.97L12.58 13.58L18.97 11.07L3 3Z"
+                    fill={peerColor}
+                    stroke="#ffffff"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span
+                  className="peer-cursor-label"
+                  style={{ backgroundColor: peerColor }}
+                >
+                  {user}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
       <NotificationSnackBar

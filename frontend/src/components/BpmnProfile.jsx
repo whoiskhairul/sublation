@@ -49,22 +49,26 @@ const BpmnProfile = () => {
     //go to path image-to-bpmn
     navigate('/image-to-bpmn/')
   }
+  const [featureModal, setFeatureModal] = useState({ open: false, type: '', title: '', subtitle: '' });
+
   const handleOptimization = async () => {
-    try {
-      // navigate(pathname + '/optimize-bpmn/')
+    setFeatureModal({
+      open: true,
+      type: 'optimize',
+      title: 'Process Optimization',
+      subtitle: 'Select a diagram from your workspace to analyze and improve its process workflow:'
+    });
+  };
 
-    } catch (err) {
-      console.log(err);
-    }
-  }
   const handleErrorDetection = async () => {
-    try {
-      // navigate(pathname + '/error-detection/')
+    setFeatureModal({
+      open: true,
+      type: 'errors',
+      title: 'Error Detection & Validation',
+      subtitle: 'Select a diagram to validate syntax, connection flow, and BPMN 2.0 standards:'
+    });
+  };
 
-    } catch (err) {
-      console.log(err);
-    }
-  }
   const handleSimulation = async () => {
     try {
       // navigate(pathname + '/simulation/')
@@ -85,7 +89,7 @@ const BpmnProfile = () => {
     { name: 'Create New BPMN', color: '#fff', image: '/createbpmn.svg', path: () => handletextToBpmn(), tooltip: 'Create BPMN by texting with interective chatbot' },
     { name: 'Image to BPMN', color: '#E0E7FF', image: '/image.jpg', path: () => handleImageToBPMN() },
     { name: 'Template Galary', color: green[400], image: '/template.jpg', path: () => handleTemplate() },
-    { name: 'Process optimization', color: '#E0E7FF', image: '/optimization.jpg', path: () => handleSimulation() },
+    { name: 'Process optimization', color: '#E0E7FF', image: '/optimization.jpg', path: () => handleOptimization() },
     { name: 'Error Detection', color: red[400], image: '/error.jpg', path: () => handleErrorDetection() },
     { name: 'Smart Simulation', color: '#E0E7FF', image: '/simulation.jpg', path: () => handleSimulation() },
     // { name: 'Smart Simulation', color: '#E0E7FF', image: '/Untitled.png', path: () => handleSimulation() },
@@ -253,7 +257,7 @@ const BpmnProfile = () => {
       setOpenSnack(true);
     }
   };
-  
+
 
   const [newName, setNewName] = useState('');
 
@@ -356,13 +360,17 @@ const BpmnProfile = () => {
     });
 
   return (
-    <div style={{ height: '100vh', overflow: 'none' }}>
+    <div style={{ overflow: 'none' }}>
       <NavigationBar />
       <div className="content" style={{
+        minHeight: 'auto',
+        height: 'auto',
         paddingTop: '1rem',
         paddingBottom: '1rem',
         backgroundImage: 'url(/bg.svg)',
         backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
         backgroundColor: '#f5f5f5',
         overflow: 'hidden'
       }}>
@@ -547,7 +555,7 @@ const BpmnProfile = () => {
                     aria-label="settings"
                     onClick={(event) => {
                       event.stopPropagation(); // Add this line to stop event propagation
-                      
+
 
                     }}>
                     <MoreVert />
@@ -610,13 +618,13 @@ const BpmnProfile = () => {
                       </IconButton>
                     }
                     title={diagram.name.length > 20 ? `${diagram.name.slice(0, 20)}...` : diagram.name}
-                    // subheader={diagram.id}
+                  // subheader={diagram.id}
                   />
                   <CardMedia
                     onClick={() => navigate(`/homepage/bpmn/${diagram.encrypted_id}`)}
                     component="img"
                     height="194"
-                    image={diagram.bpmn_svg ? `data:image/svg+xml;utf8,${encodeURIComponent(diagram.bpmn_svg)}` : '/folia.svg'}
+                    image={diagram.bpmn_svg && !diagram.bpmn_svg.includes('width="0"') ? `data:image/svg+xml;utf8,${encodeURIComponent(diagram.bpmn_svg)}` : '/folia.svg'}
                     style={{
                       objectFit: 'contain',
                       transform: 'scale(1)',
@@ -673,11 +681,33 @@ const BpmnProfile = () => {
 
 
                   }}>
-                  <Tooltip title={diagram.name ? diagram.name : ''}>
-                    <Typography sx={{ cursor: 'pointer', width: '20%' }} variant="body1" >
-                      {diagram.name.length > 30 ? `${diagram.name.slice(0, 30)}...` : diagram.name}
-                    </Typography>
-                  </Tooltip>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '35%' }}>
+                    <Box
+                      sx={{
+                        width: 52,
+                        height: 38,
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        border: '1px solid #E2E8F0',
+                        backgroundColor: '#F8FAFC',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      <img
+                        src={diagram.bpmn_svg && !diagram.bpmn_svg.includes('width="0"') ? `data:image/svg+xml;utf8,${encodeURIComponent(diagram.bpmn_svg)}` : '/folia.svg'}
+                        alt={diagram.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </Box>
+                    <Tooltip title={diagram.name ? diagram.name : ''}>
+                      <Typography sx={{ cursor: 'pointer', fontWeight: 500 }} variant="body2" >
+                        {diagram.name.length > 30 ? `${diagram.name.slice(0, 30)}...` : diagram.name}
+                      </Typography>
+                    </Tooltip>
+                  </Box>
                   <Tooltip title={`Last Edited at ${diagram.updated_at}`}>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       {`${diagram.updated_at}`}
@@ -832,6 +862,174 @@ const BpmnProfile = () => {
               setOpenMoveDialog(false);
             }} color="primary">
               Move
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Feature Select Modal for Process Optimization & Error Detection */}
+        <Dialog
+          open={featureModal.open}
+          onClose={() => setFeatureModal({ open: false, type: '', title: '', subtitle: '' })}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: { borderRadius: '16px', p: 1 }
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 700, fontSize: '1.2rem', pb: 0.5 }}>
+            {featureModal.title}
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ fontSize: '0.875rem', color: '#4B5563', mb: 2 }}>
+              {featureModal.subtitle}
+            </DialogContentText>
+
+            {/* Quick action: Upload .bpmn file directly */}
+            <Box
+              component="label"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1.5,
+                p: 2,
+                mb: 2.5,
+                border: '2px dashed #93C5FD',
+                borderRadius: '12px',
+                backgroundColor: '#EFF6FF',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  borderColor: '#3B82F6',
+                  backgroundColor: '#DBEAFE'
+                }
+              }}
+            >
+              <input
+                type="file"
+                accept=".bpmn,.xml"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = async (event) => {
+                    const xmlContent = event.target.result;
+                    try {
+                      const token = await refreshAccessToken();
+                      const url = config.apiBaseUrl + '/bpmn/create-bpmn-diagram/';
+                      const response = await axios.post(url, { templateXml: xmlContent }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      });
+                      const createdId = response.data.encrypted_id;
+                      setFeatureModal({ open: false, type: '', title: '', subtitle: '' });
+                      navigate(`/homepage/bpmn/${createdId}?action=${featureModal.type}`);
+                    } catch (err) {
+                      console.error("Error creating diagram from uploaded file:", err);
+                    }
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+              <Folder sx={{ fontSize: 28, color: '#2563EB' }} />
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: '#1D4ED8' }}>
+                  Upload a .bpmn file from your computer
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#6B7280' }}>
+                  Quickly test any standalone process model
+                </Typography>
+              </Box>
+            </Box>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#374151' }}>
+              Or choose from existing diagrams:
+            </Typography>
+
+            {/* List of user diagrams */}
+            <Box
+              sx={{
+                maxHeight: '320px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                pr: 0.5
+              }}
+            >
+              {diagrams.length === 0 ? (
+                <Typography variant="body2" sx={{ color: '#9CA3AF', py: 2, textAlign: 'center' }}>
+                  No diagrams found. Upload a file above or create a new diagram.
+                </Typography>
+              ) : (
+                diagrams.map((d) => (
+                  <Box
+                    key={d.encrypted_id}
+                    onClick={() => {
+                      const targetType = featureModal.type;
+                      setFeatureModal({ open: false, type: '', title: '', subtitle: '' });
+                      navigate(`/homepage/bpmn/${d.encrypted_id}?action=${targetType}`);
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      p: 1.2,
+                      borderRadius: '10px',
+                      border: '1px solid #E5E7EB',
+                      backgroundColor: '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      '&:hover': {
+                        backgroundColor: '#F3F4F6',
+                        borderColor: '#2563EB',
+                        transform: 'translateX(3px)'
+                      }
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 48,
+                        height: 36,
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        border: '1px solid #E2E8F0',
+                        backgroundColor: '#F8FAFC',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      <img
+                        src={d.bpmn_svg && !d.bpmn_svg.includes('width="0"') ? `data:image/svg+xml;utf8,${encodeURIComponent(d.bpmn_svg)}` : '/folia.svg'}
+                        alt={d.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </Box>
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {d.name}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#6B7280' }}>
+                        Last edited: {d.updated_at}
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      sx={{ textTransform: 'none', borderRadius: '6px', fontSize: '0.75rem', px: 1.5 }}
+                    >
+                      Select
+                    </Button>
+                  </Box>
+                ))
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setFeatureModal({ open: false, type: '', title: '', subtitle: '' })}>
+              Close
             </Button>
           </DialogActions>
         </Dialog>

@@ -59,6 +59,11 @@ const BpmnViewerComponent = ({ diagramXml }) => {
         modelerRef.current.importXML(xmlToLoad).then(
             () => {
                 console.log("BPMN diagram successfully imported or updated.");
+                try {
+                    modelerRef.current.get("canvas").zoom("fit-viewport");
+                } catch (e) {
+                    console.warn("Could not fit viewport:", e);
+                }
             },
             (err) => {
                 console.error("Failed to import BPMN diagram, loading default.", err);
@@ -66,6 +71,9 @@ const BpmnViewerComponent = ({ diagramXml }) => {
                 modelerRef.current.importXML(DEFAULT_BPMN_XML).then(
                     () => {
                         console.log("Default BPMN diagram loaded.");
+                        try {
+                            modelerRef.current.get("canvas").zoom("fit-viewport");
+                        } catch (e) { }
                     },
                     (fallbackErr) => {
                         console.error("Failed to load default BPMN diagram.", fallbackErr);
@@ -132,25 +140,18 @@ const BpmnViewerComponent = ({ diagramXml }) => {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "85vh" }}>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%" }}>
             <div
                 ref={containerRef}
                 style={{
-                    flex: 1, // Ensures the canvas takes up all available vertical space
-                    border: "1px solid #ccc",
+                    flex: 1,
+                    width: "100%",
+                    height: "100%",
+                    backgroundColor: "#ffffff",
+                    backgroundImage: "radial-gradient(circle, #e2e8f0 1px, rgba(0, 0, 0, 0) 1px)",
+                    backgroundSize: "20px 20px"
                 }}
             />
-            <div
-                style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "10px",
-                    borderTop: "1px solid #ccc",
-                    backgroundColor: "#f9f9f9",
-                }}
-            >
-
-            </div>
         </div>
     );
 };
